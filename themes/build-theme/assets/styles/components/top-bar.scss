@@ -1,0 +1,43 @@
+.top-bar {
+    width            : 100%;
+    background-color : $light-orange;
+    padding          : 0 $spacing-unit;
+    color            : #FFFFFF;
+    @include top-bar-gradient-background;
+
+    .container {
+        display         : flex;
+        align-items     : center;
+        justify-content : center;
+        width           : 100%;
+        max-width       : 900px;
+        margin          : 0 auto;
+
+        & > .link {
+            margin-top : 2px;
+        }
+
+        & > .link:first-child:hover {
+            color : $light-orange;
+        }
+
+        & > .link:last-child:hover {
+            color : $light-blue;
+        }
+    }
+
+    .link, .item {
+        transition : 0.2s ease-in-out color;
+    }
+
+    .link, .logo {
+        margin : 0 $spacing-medium;
+    }
+
+    .link {
+        color       : #FFFFFF;
+        font-size   : 2.25rem;
+        font-weight : bold;
+        line-height : $line-height-base;
+    }
+}

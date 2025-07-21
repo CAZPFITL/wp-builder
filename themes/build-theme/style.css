@@ -1,0 +1,16 @@
+/*
+Theme Name: BIOLERPLATE
+Theme URI: https://opencollective.com/BIOLERPLATE
+Author: Cazpfitl
+Version: 2024.2
+License: GNU General Public License v3 or Later
+License URI: https://www.gnu.org/licenses/gpl.html
+Text Domain: BIOLERPLATE
+
+BIOLERPLATE WordPress Theme 2011-2024
+BIOLERPLATE is distributed under the terms of the GNU GPL
+*/
+
+body{
+    background: red !important;
+}

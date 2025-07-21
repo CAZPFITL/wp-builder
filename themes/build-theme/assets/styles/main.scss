@@ -1,0 +1,33 @@
+@import 'abstracts/functions';
+@import 'abstracts/variables';
+@import 'abstracts/mixins';
+
+@import 'base/global';
+@import 'base/reset';
+
+@import 'components/link';
+@import 'components/logo';
+@import 'components/section';
+@import 'components/top-bar';
+@import 'components/image';
+@import 'components/hero';
+@import 'components/badges';
+@import 'components/buttons';
+@import 'components/cards';
+
+@import 'sections/citas';
+@import 'sections/destacadas';
+@import 'sections/relacionadas';
+@import 'sections/fraccionamiento';
+
+@import 'layout/grid';
+@import 'layout/header';
+@import 'layout/footer';
+
+@import 'pages/home';
+@import 'pages/archive';
+@import 'pages/post';
+
+*, *::before, *::after {
+    box-sizing : border-box;
+}

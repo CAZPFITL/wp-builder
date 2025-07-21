@@ -1,0 +1,23 @@
+.fraccionamiento {
+    padding : $spacing-xlarge 0;
+
+    .image {
+        aspect-ratio  : 5 / 2;
+        border-radius : $spacing-small;
+        @include card-shadow;
+    }
+
+    .container {
+        display       : flex;
+        align-content : start;
+        padding       : $spacing-large 0;
+    }
+
+    .content {
+        margin-left : $spacing-large;
+
+        p {
+            margin-top : 0;
+        }
+    }
+}

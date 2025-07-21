@@ -1,0 +1,37 @@
+// _mixins.scss
+@mixin hero-gradient-background {
+    background : linear-gradient(
+                    180deg,
+                    rgba(0, 0, 0, 0.55) 0%,
+                    rgba(102, 102, 102, 0.5) 12%,
+                    rgba(102, 102, 102, 0.4) 24%,
+                    rgba(102, 102, 102, 0.1) 36%,
+                    rgba(102, 102, 102, 0) 80%,
+                    rgba(102, 102, 102, 0.12) 90%,
+                    rgba(0, 0, 0, 0.14) 100%
+    );
+}
+
+@mixin top-bar-gradient-background {
+    background : linear-gradient(180deg, rgba(0, 0, 0, 0.12) 0%, rgba(0, 0, 0, 0.024) 100%);
+}
+
+@mixin section-gradient-background {
+    background : linear-gradient(180deg, rgba(241, 127, 23, 0.02) 0%, rgba(241, 127, 23, 0) 50%, rgba(241, 127, 23, 0.02) 100%), rgba(242, 198, 104, 0.1);
+}
+
+@mixin card-image-gradient-background {
+    background : linear-gradient(180deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.3) 12%, rgba(0, 0, 0, 0.2) 24%, rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, 0.1) 76%, rgba(0, 0, 0, 0.2) 88%, rgba(0, 0, 0, 0.3) 100%);
+}
+
+@mixin card-shadow {
+    box-shadow : 0 14px 43px rgba(0, 0, 0, 0.12),
+    0 7.00684px 21.521px rgba(0, 0, 0, 0.0677566),
+    0 4.22059px 12.9632px rgba(0, 0, 0, 0.0345219),
+    0 2.70478px 8.30752px rgba(0, 0, 0, 0.0153987),
+    0 1.75302px 5.38427px rgba(0, 0, 0, 0.00696405),
+    0 1.1035px 3.38934px rgba(0, 0, 0, 0.00643791),
+    0 0.634032px 1.94738px rgba(0, 0, 0, 0.0109426),
+    0 0.279054px 0.857094px rgba(0, 0, 0, 0.015834);
+}
+

@@ -1,4 +1,6 @@
 /.env
-/themes/emede/
-/themes/build-theme/
-/themes/
+/.idea
+/dist
+/node_modules
+/themes/build-theme/assets/dist/
+/themes/build-theme/assets/node_modules/

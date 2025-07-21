@@ -1,0 +1,33 @@
+.logo {
+    display : block;
+    height  : max-content;
+    margin  : auto 0;
+
+    h1 {
+        font-size   : 6rem;
+        line-height : $line-height-base;
+        margin      : auto 0;
+    }
+
+    .item {
+        transition : 0.2s ease-in-out color;
+    }
+
+    .item-m {
+        color : $brand-blue;
+    }
+
+    .item-d {
+        color : $brand-orange;
+    }
+
+    &:hover {
+        .item-m {
+            color : $brand-orange;
+        }
+
+        .item-d {
+            color : $brand-blue;
+        }
+    }
+}
