@@ -34,7 +34,9 @@ services:
       - php
 
   db:
-    image: mysql:8.0
+    build:
+      context: .
+      dockerfile: docker/wordpress/Dockerfile
     platform: linux/x86_64
     ports:
       - "${MYSQL_PORT}:3306"
