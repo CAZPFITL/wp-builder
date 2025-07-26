@@ -1,5 +1,7 @@
+@use "sass:math";
+
 // Colors
-$white                  : #ce4c4c;
+$white                  : #ffffff;
 $black                  : #333333;
 $dark-blue              : #366386;
 $brand-blue             : #1D5FAA;
@@ -17,7 +19,7 @@ $line-height-base       : 1.5;
 
 // Spacing
 $spacing-unit           : 8px;
-$spacing-small          : $spacing-unit / 2; // 8px
+$spacing-small          : math.div($spacing-unit, 2); // 8px
 $spacing-medium         : $spacing-unit * 2; // 16px
 $spacing-large          : $spacing-unit * 3; // 24px
 $spacing-xlarge         : $spacing-unit * 4; // 32px
