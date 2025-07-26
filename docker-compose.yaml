@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   wordpress:
     image: wordpress:latest
@@ -34,9 +32,7 @@ services:
       - php
 
   db:
-    build:
-      context: .
-      dockerfile: docker/wordpress/Dockerfile
+    image: mysql:8.0
     platform: linux/x86_64
     ports:
       - "${MYSQL_PORT}:3306"

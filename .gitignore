@@ -2,5 +2,6 @@
 /.idea
 /dist
 /node_modules
-/themes/build-theme/assets/dist/
-/themes/build-theme/assets/node_modules/
+/themes/blue-echo-beats/assets/dist/
+/themes/blue-echo-beats/assets/node_modules/
+/themes/blue-echo-beats/assets/package-lock.json

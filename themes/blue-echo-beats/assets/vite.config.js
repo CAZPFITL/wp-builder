@@ -32,7 +32,7 @@ export default defineConfig({
         preprocessorOptions: {
             scss: {
                 // Opcional: Agregar variables globales o mixins
-                additionalData: `@import "./styles/abstracts/variables.scss";`,
+                additionalData: `@use "./styles/abstracts/variables.scss";`,
             },
         },
     },
