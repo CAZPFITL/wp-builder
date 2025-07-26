@@ -1,40 +1,68 @@
-.site-footer {
-    color      : $white;
-    background : linear-gradient(0deg, #141D3A 0%, #385271 100%);
-    padding    : $spacing-xlarge 0;
+@import "../abstracts/variables";
 
-    .grid {
-        display               : grid;
-        grid-template-columns : 2fr 1fr 1fr;
+.beb-footer {
+    background-color: rgba($dark-blue, 0.51);
+    color: $white;
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+
+    &__container {
+        max-width: map-get($grid-breakpoints, xl);
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: start;
+        text-align: center;
+        padding: $spacing-xlarge 0  $spacing-xlarge * 0.9;
+        gap: $spacing-medium;
     }
 
-    .title {
-        text-align : left;
+    .custom-logo {
+        width: auto;
+        max-height: 32px;
     }
 
-    .link {
-        color : $white;
+    &__brand {
+        display: flex;
+        align-items: center;
     }
 
-    .brand {
-        display         : flex;
-        align-content   : center;
-        justify-content : start;
-        margin-top      : $spacing-medium;
+    &__text {
+        margin-left: $spacing-small * 3;
+    }
 
-        p {
-            margin : auto 0;
+    &__title {
+        font-weight: 700;
+    }
+
+    &__tagline {
+        font-weight: 100;
+        opacity: 0.8;
+    }
+
+    &__menu {
+        .beb-footer__list {
+            list-style: none;
+            display: flex;
+            flex-wrap: wrap;
+            gap: $spacing-large;
+            padding: 0;
+            margin: 0;
+
+            li a {
+                color: $white;
+                text-decoration: none;
+                font-weight: 500;
+
+                &:hover {
+                    opacity: 0.8;
+                }
+            }
         }
     }
 
-    .logo {
-        margin-bottom : 1px;
-        margin-left   : $spacing-unit;
-
-        h1 {
-            font-size   : 4rem;
-            line-height : 1em;
-            height      : max-content;
-        }
+    &__copy {
+        opacity: 0.7;
     }
 }

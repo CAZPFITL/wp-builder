@@ -1,0 +1,12 @@
+.beb-hero {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  height: 100vh;
+
+  &__title {
+    font-size: 3rem;
+    color: $brand-blue;
+  }
+}

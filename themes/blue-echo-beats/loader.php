@@ -15,13 +15,9 @@ function theme_autoload_classes() {
         'Admin/Admin.php',
         'Admin/Enqueue.php',
 
-        'PostTypes/Inmueble.php',
+        'PostTypes/Songs.php',
 
-        'Taxonomies/Ciudades.php',
-        'Taxonomies/Caracteristicas.php',
-        'Taxonomies/Estados.php',
-        'Taxonomies/Tratos.php',
-        'Taxonomies/Tipos.php',
+        'Taxonomies/Genres.php',
     );
 
     foreach ($files as $file) {

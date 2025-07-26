@@ -4,14 +4,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class Caracteristicas extends Base {
+class Genres extends Base {
 	use Singleton;
 
-	protected string $slug = 'caracteristica';
+	protected string $slug = 'genres';
 
-	protected array $labels = [ 'singular' => 'Caracteristica', 'plural' => 'Caracteristicas' ];
+	protected array $labels = [ 'singular' => 'Genre', 'plural' => 'Genres' ];
 
-	protected array $context = [ 'inmueble' ];
+	protected array $context = [ 'genre' ];
 
 	protected array $add_meta_boxes = [
 		[
@@ -33,7 +33,7 @@ class Caracteristicas extends Base {
 
 	protected array $args = [
 		'public'            => true, // Hacer la taxonomía accesible públicamente
-		'rewrite'           => [ 'slug' => 'caracteristica' ], // Slug para la URL
+		'rewrite'           => [ 'slug' => 'genre' ], // Slug para la URL
 		'hierarchical'      => true, // Comportamiento jerárquico como categorías
 		'show_ui'           => true, // Mostrar en el administrador
 		'show_in_menu'      => true, // Mostrar en el menú del administrador

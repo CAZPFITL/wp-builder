@@ -11,13 +11,9 @@ class Admin extends Base
     public function load_instances(): void {
         Enqueue::getInstance();
 
-        Inmueble::getInstance();
+        Songs::getInstance();
 
-        Caracteristicas::getInstance();
-        Ciudades::getInstance();
-        Estados::getInstance();
-        Tipos::getInstance();
-        Tratos::getInstance();
+        Genres::getInstance();
     }
 
     // Admin uses 0 to 10 as priority
@@ -29,6 +25,12 @@ class Admin extends Base
 
 	public function boilerplate_setup() {
 		add_theme_support('post-thumbnails');
+        add_theme_support( 'custom-logo', array(
+            'height'      => 300,
+            'width'       => 300,
+            'flex-height' => true,
+            'flex-width'  => true,
+        ));
 	}
 
     public function remove_menus(): void {

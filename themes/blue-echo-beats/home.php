@@ -1,6 +1,7 @@
 <?php
 get_header();
-get_template_part( 'sections/destacadas' );
-get_template_part( 'sections/citas' );
-get_template_part( 'sections/fraccionamiento' );
+get_template_part('sections/hero');
+get_template_part('sections/dummy');
+get_template_part('sections/dummy');
+get_template_part('sections/dummy');
 get_footer();
