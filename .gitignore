@@ -8,4 +8,12 @@
 **/node_modules/
 **/package-lock.json
 
+# Themes (ignore all themes if intended)
 /themes/*
+/backups/*
+
+# Archives and dumps
+**/*.sql
+**/*.tar
+**/*.zip
+**/*.tar.gz
