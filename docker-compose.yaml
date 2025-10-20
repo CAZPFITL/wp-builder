@@ -1,18 +1,33 @@
+version: '3.8'
+
 services:
   wordpress:
-    image: wordpress:latest
+    build:
+      context: .
+      dockerfile: docker/wordpress/Dockerfile
     ports:
       - "${WP_PORT}:80"  # Puerto configurable desde .env
     environment:
+      ACTIVE_THEME: ${ACTIVE_THEME}
       WORDPRESS_DB_HOST: ${WORDPRESS_DB_HOST}
       WORDPRESS_DB_USER: ${WORDPRESS_DB_USER}
       WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD}
       WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME}
       VITE_DEV_MODE: ${VITE_DEV_MODE}
       VITE_PORT: ${VITE_PORT}
+      WP_ENV: ${WP_ENV}
     volumes:
       - wordpress_data:/var/www/html
       - ./themes/${ACTIVE_THEME}:/var/www/html/wp-content/themes/${ACTIVE_THEME}
+    command: >
+      bash -c "
+        if [ -n \"$$ACTIVE_THEME\" ] && [ -f \"/var/www/html/wp-content/themes/$$ACTIVE_THEME/composer.json\" ]; then
+          echo '📦 Instalando dependencias de Composer para tema:' $$ACTIVE_THEME &&
+          cd /var/www/html/wp-content/themes/$$ACTIVE_THEME &&
+          composer install --no-dev --optimize-autoloader;
+        fi &&
+        apache2-foreground
+      "
     depends_on:
       - db
 
@@ -36,6 +51,7 @@ services:
   db:
     image: mysql:8.0
     platform: linux/x86_64
+    command: ["--skip-ssl", "--require_secure_transport=OFF"]
     ports:
       - "${MYSQL_PORT}:3306"
     environment:
@@ -43,6 +59,7 @@ services:
       MYSQL_DATABASE: ${WORDPRESS_DB_NAME}
       MYSQL_USER: ${WORDPRESS_DB_USER}
       MYSQL_PASSWORD: ${WORDPRESS_DB_PASSWORD}
+      MYSQL_SSL_MODE: DISABLED
     volumes:
       - db_data:/var/lib/mysql
 
