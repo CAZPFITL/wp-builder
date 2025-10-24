@@ -18,7 +18,8 @@ apt-get install -y \
     curl \
     unzip \
     default-mysql-client \
-    git
+    git \
+    jq
 
 # Install WP-CLI
 echo "🚀 Installing WP-CLI..."
