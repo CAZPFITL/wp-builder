@@ -12,3 +12,7 @@ ENV WP_CLI_ALLOW_ROOT=1
 # Script to install Composer dependencies in the active theme
 COPY docker/scripts/install-theme-dependencies.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/install-theme-dependencies.sh
+
+# Script to install required plugins from the active theme JSON
+COPY docker/scripts/install-required-plugins.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/install-required-plugins.sh
