@@ -7,6 +7,12 @@ RUN chmod +x /tmp/install-system-dependencies.sh && /tmp/install-system-dependen
 # Optional: allow WP-CLI as root without warnings
 ENV WP_CLI_ALLOW_ROOT=1
 
+# (Plugins pre-install removed) Keeping image lean and runtime-driven
+
 # Script to install Composer dependencies in the active theme
 COPY docker/scripts/install-theme-dependencies.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/install-theme-dependencies.sh
+
+# Script to install required plugins from the active theme JSON
+COPY docker/scripts/install-required-plugins.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/install-required-plugins.sh

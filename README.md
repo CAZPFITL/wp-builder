@@ -145,3 +145,51 @@ Notas:
 
 - Asegúrate de que `.env` tenga `ACTIVE_THEME` apuntando a la carpeta de tu tema (por ejemplo, `ACTIVE_THEME=theme`).
 - Si no existe `composer.json` en el tema, no se generará `vendor/` y se saltará la instalación.
+
+## Instalación automática de plugins del tema (WP‑CLI)
+
+Este proyecto instala automáticamente los plugins requeridos definidos por tu tema activo usando WP‑CLI. La definición se toma de `themes/<ACTIVE_THEME>/required-plugins.json`.
+
+• Cuándo corre
+
+- Al iniciar el contenedor `wordpress`, antes de arrancar Apache, se ejecuta `/usr/local/bin/install-required-plugins.sh`.
+- Si WordPress aún no está instalado, el script termina sin error y puedes ejecutarlo manualmente después de completar la instalación.
+
+• Dónde definir los plugins
+
+Coloca un archivo `required-plugins.json` en el directorio del tema activo. Ejemplo mínimo:
+
+```json
+{
+    "plugins": [
+        { "name": "wp-fastest-cache", "activate": true }
+    ],
+    "configuration": {
+        "auto_activate": true,
+        "skip_existing": true,
+        "update_existing": false,
+        "required_plugins": ["wp-fastest-cache"]
+    }
+}
+```
+
+• Cómo se interpreta
+
+- `configuration.required_plugins`: lista prioritaria de slugs a instalar (y su orden). Si no existe, se usan `plugins[].name`.
+- `plugins[].activate`: activa por‑plugin; tiene prioridad sobre `auto_activate` global.
+- `configuration.auto_activate`: activa todos los instalados, salvo que el plugin tenga `activate: false`.
+- `configuration.skip_existing`: si es `true`, no reinstala plugins ya presentes (pero puede activarlos si corresponde).
+- `configuration.update_existing`: si es `true`, fuerza reinstalación/actualización (`--force`).
+
+• Ejecución manual (Windows PowerShell)
+
+Si necesitas relanzar la instalación tras configurar WordPress o cambiar el JSON:
+
+```powershell
+docker compose exec wordpress bash -lc "/usr/local/bin/install-required-plugins.sh"
+```
+
+• Requisitos internos
+
+- WP‑CLI y `jq` están preinstalados en la imagen de `wordpress` de este proyecto.
+- La variable `.env` `ACTIVE_THEME` debe apuntar a la carpeta del tema activo.
