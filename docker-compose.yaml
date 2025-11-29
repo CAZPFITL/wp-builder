@@ -19,17 +19,7 @@ services:
     volumes:
       - wordpress_data:/var/www/html
       - ./themes/${ACTIVE_THEME}:/var/www/html/wp-content/themes/${ACTIVE_THEME}
-    command: >
-      bash -c "
-        # Instalar plugins requeridos (no falla si WP aún no está instalado)
-        /usr/local/bin/install-required-plugins.sh || true &&
-        if [ -n \"$$ACTIVE_THEME\" ] && [ -f \"/var/www/html/wp-content/themes/$$ACTIVE_THEME/composer.json\" ]; then
-          echo '📦 Instalando dependencias de Composer para tema:' $$ACTIVE_THEME &&
-          cd /var/www/html/wp-content/themes/$$ACTIVE_THEME &&
-          composer install --no-dev --optimize-autoloader;
-        fi &&
-        apache2-foreground
-      "
+    # Startup tasks moved to image entrypoint: docker/scripts/wp-entrypoint.sh
     depends_on:
       - db
 
