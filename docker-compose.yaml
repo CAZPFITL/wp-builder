@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   wordpress:
     build:
@@ -13,9 +11,9 @@ services:
       WORDPRESS_DB_USER: ${WORDPRESS_DB_USER}
       WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD}
       WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME}
-      VITE_DEV_MODE: ${VITE_DEV_MODE}
       VITE_PORT: ${VITE_PORT}
       WP_ENV: ${WP_ENV}
+      PREFIX: ${PREFIX}
     volumes:
       - wordpress_data:/var/www/html
       - ./themes/${ACTIVE_THEME}:/var/www/html/wp-content/themes/${ACTIVE_THEME}
