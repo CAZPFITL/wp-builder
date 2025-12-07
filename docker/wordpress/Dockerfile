@@ -19,5 +19,8 @@ RUN chmod +x /usr/local/bin/install-required-plugins.sh
 COPY docker/scripts/wp-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/wp-entrypoint.sh
 
+# PHP upload/timeout tweaks
+COPY docker/wordpress/php.ini /usr/local/etc/php/conf.d/uploads.ini
+
 ENTRYPOINT ["/usr/local/bin/wp-entrypoint.sh"]
 CMD ["apache2-foreground"]

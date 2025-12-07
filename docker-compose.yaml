@@ -65,6 +65,18 @@ services:
     depends_on:
       - php
 
+  blocks:
+    image: node:18
+    working_dir: /app/blocks
+    user: "1000:1000"
+    volumes:
+      - ./themes/${ACTIVE_THEME}/blocks:/app/blocks
+    command: ["sh", "-c", "cd forms-entries && npm install && npm run dev"]
+    ports:
+      - "${VITE_PORT_BLOCKS:-4174}:4174"
+    depends_on:
+      - php
+
 volumes:
   wordpress_data:
   db_data:

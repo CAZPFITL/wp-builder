@@ -9,7 +9,7 @@
 **/package-lock.json
 
 # Themes (ignore all themes if intended)
-/themes/*
+# /themes/*
 /backups/*
 
 # Archives and dumps

@@ -141,6 +141,12 @@ Si agregas/mueves clases, actualiza el índice de autoload:
 docker compose exec wordpress bash -lc 'cd /var/www/html/wp-content/themes/$ACTIVE_THEME && composer dump-autoload -o'
 ```
 
+Ejemplo explícito (usa el nombre del tema y la opción `-T` para TTY-less exec):
+
+```bash
+docker compose exec -T wordpress sh -lc "cd wp-content/themes/travel-concierge-me-theme && composer dump-autoload -o"
+```
+
 Notas:
 
 - Asegúrate de que `.env` tenga `ACTIVE_THEME` apuntando a la carpeta de tu tema (por ejemplo, `ACTIVE_THEME=theme`).
