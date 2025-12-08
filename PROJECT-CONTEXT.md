@@ -74,44 +74,59 @@ PREFIX=tcm_
   - `docker compose exec wordpress bash -lc 'cd /var/www/html/wp-content/themes/$ACTIVE_THEME && composer dump-autoload -o'`
 
 ## Classes Architecture (Theme)
+
 Folder: `themes/travel-concierge-me-theme/classes/`
-- `Admin/` → `Admin.php`, `Enqueue.php`
-  - `Admin` (Singleton) registers theme hooks and instantiates subsystems.
-  - `Enqueue` registers assets for admin/front/editor and integrates with `tcm_get_asset`.
-- `Base/` → `Base.php`
-  - Provides lifecycle (`init()`, `register_actions()`, `register_filters()`), hook helpers, and composes traits.
-- `Blocks/` → `BlocksManager.php`
-  - Registers Gutenberg custom blocks, render callbacks, and block categories.
-- `Database/` → migrations/table managers, `CliMigration.php` for WP‑CLI (`my-wp-tables-migrate`).
+
+- `Admin/`
+- `Admin.php` → Bootstraps the theme lifecycle (hooks, menus, enqueue, DB migrations, REST, blocks manager) and composes subsystems.
+- `Enqueue.php` → Registers admin/front/editor assets using `tcm_get_asset` and adds `type="module"` for modern scripts.
+- `Redirects.php` → Centralizes admin-only redirects and access flow.
+- `ThemeActivator.php` → Handles activation-time tasks such as initial settings or capability checks.
+- `FormsEntriesPage.php` → Registers and renders the admin UI for forms entries.
+
+- `Base/`
+- `Base.php` → Provides lifecycle (`init()`, `register_actions()`, `register_filters()`), hook helpers, and composes traits. Most classes extend this.
+
+- `Blocks/`
+- `BlocksManager.php` → Registers Gutenberg custom blocks, server-side render callbacks, and block categories. Loads block assets produced by WordPress (`*.asset.php`).
+
+- `Database/` → Migrations/table managers and `CliMigration.php` for WP‑CLI (`my-wp-tables-migrate`).
 - `Endpoints/` → REST endpoints (e.g., FormsEntries).
 - `PostTypes/`, `Taxonomies/`, `Traits/` → CPT/taxonomies and shared helpers.
 
 Conventions:
+
 - Most classes use the `Singleton` trait.
 - Hooks are declared in `register_actions()`/`register_filters()` methods.
 - Side effects are centralized via `Admin::load_instances()`.
 
 ## Assets and Vite
-Folder: `themes/travel-concierge-me-theme/assets/`
-- `package.json` scripts:
-  - `dev` → `vite`
-  - `build` → `vite build`
-- `vite.config.js` (with `@vitejs/plugin-react`):
-  - Inputs:
-    - `front`, `admin` JS
-    - `styles/front.scss`, `styles/admin.scss`
-    - Block entries: `blocks/form-input/index` (JSX) and `blocks/form-input/editor`/`style` (SCSS)
-  - Output pattern:
-    - Scripts → `dist/scripts/[name].js` except blocks preserved as `dist/blocks/...`
-    - Styles → `dist/styles/[name].[ext]` (blocks preserved as `dist/blocks/...`)
-  - `manifest: true` to integrate with theme loader/asset resolver.
 
-Blocks structure:
-- Definitions/styles: `themes/<ACTIVE_THEME>/blocks/form-input/{block.json, editor.scss, style.scss}`
-- React component: `themes/<ACTIVE_THEME>/assets/scripts/blocks/form-input.jsx`
-- The `BlocksManager` registers blocks and their server-side render callbacks.
+Folder: `themes/travel-concierge-me-theme/assets/`
+ 
+`package.json` scripts:
+
+- `dev` → `vite`
+- `build` → `vite build`
+- `preview` → `vite preview`
+- `vite.config.js`:
+- Inputs:
+- `scripts/front.js`, `scripts/admin.js`
+- `styles/front.scss`, `styles/admin.scss`
+- Output pattern:
+- Scripts → `scripts/[name].js`
+- Styles → `styles/[name].[ext]`
+- `manifest: true` to integrate with theme loader/asset resolver.
+- Dev server: `host: true`, `port: 5159`, `strictPort: true`.
+- SCSS global imports: `additionalData` prepends `styles/abstracts/variables.scss`.
+
+Blocks
+
+- Current blocks under `themes/<ACTIVE_THEME>/blocks/forms-entries/` include `index.js`, `edit.js`, `save.js`, `view.js`, and CSS (`editor.css`, `style.css`) with generated `*.asset.php` files.
+- Blocks are not built via Vite; they use WordPress build artifacts and are registered/loaded by the theme's `BlocksManager` and PHP enqueue logic.
 
 ## Docs Guidelines (Theme `docs/`)
+
 - BEM naming and SCSS architecture are documented under `themes/<ACTIVE_THEME>/docs/`.
 - Key docs:
   - `bem-conventions.md`, `bem-naming.md` → CSS methodology
@@ -120,17 +135,66 @@ Blocks structure:
   - `html-template-guidelines.md`, `code-documentation-guidelines.md` → standards
 
 Essentials:
+
 - Keep `functions.php` minimal; prefer classes under `classes/`.
 - Add new setup tasks in `Admin` or a dedicated class and hook via `register_actions()`.
 - Follow BEM + SCSS layered imports in `assets/styles/front.scss` and related files.
 
+## Forms Usage (Theme)
+
+This theme includes reusable form partials and a consolidated SCSS component for consistent styling.
+
+- Paths:
+  - Templates: `themes/travel-concierge-me-theme/templates/partials/forms/`
+    - `text-input.php`, `textarea.php`, `select.php`, `checkbox-group.php`, `radio-group.php`
+  - Styles: `themes/travel-concierge-me-theme/assets/styles/components/forms.scss`
+
+- Styling:
+  - Global inputs (`input`, `select`, `textarea`) use variables from `abstracts/variables.scss` (colors, spacing, fonts).
+  - Focus states use `$brand-primary` and `add-opacity()` for accessible outlines.
+  - Spacing and typography leverage the `fs()` utility and `$spacing-*` scale.
+
+- Importing:
+  - `assets/styles/front.scss` (and `admin.scss` if needed) should import `components/forms` to include the styles in the built CSS bundles.
+  - Vite prepends `styles/abstracts/variables.scss` automatically; ensure `functions.scss` is available where `fs()` and helpers are used.
+
+- Usage in PHP templates:
+  - Include partials where needed, passing context via variables before the include.
+
+    ```php
+    // Example: text input
+    $name        = 'email';
+    $label       = __('Email', 'tcm');
+    $placeholder = __('you@example.com', 'tcm');
+    $value       = '';
+    include get_template_directory() . '/templates/partials/forms/text-input.php';
+    ```
+  - Partial conventions:
+    - Expect variables like `$name`, `$label`, `$value`, `$placeholder`, `$required`.
+    - Render with BEM-friendly classes (e.g., `.form-field`).
+
+- Build & serve:
+  - Development (hot reload): `docker compose up -d vite`
+  - Production build: `docker compose run --rm vite npm run build`
+
+- Accessibility:
+  - Labels and legends are styled in `forms.scss`; ensure every input has an associated `<label>` or `aria-label`.
+  - Use `.visually-hidden` for labels that should be screen-reader-only.
+
+Notes:
+
+- When adding new field types, create a matching partial under `templates/partials/forms/` and extend `components/forms.scss` as needed.
+- Keep validation UI minimal; rely on native `:invalid` when possible and enhance progressively.
+
 ## How Services Connect to WordPress & Theme
+
 - WordPress loads the active theme from the mounted path (`/var/www/html/wp-content/themes/${ACTIVE_THEME}`).
 - Composer autoload enables class loading under `classes/`.
-- Vite compiles assets; the dev server is reachable at `http://localhost:${VITE_PORT}` and production assets are written to `themes/<ACTIVE_THEME>/assets/dist/`.
-- Block assets are compiled under `dist/blocks/...` and referenced via `block.json` + theme helpers.
+- Vite compiles theme JS/SCSS; the dev server is reachable at `http://localhost:${VITE_PORT}` and production assets are written under `themes/<ACTIVE_THEME>/assets/` following `scripts/*` and `styles/*` patterns.
+- Blocks are managed outside Vite; their JS/CSS and `*.asset.php` files live under `themes/<ACTIVE_THEME>/blocks/`.
 
 ## Core Commands (Docker)
+
 ```bash
 # Build and start services
 docker compose up --build -d
@@ -152,6 +216,7 @@ docker compose logs -f vite
 ```
 
 ## Notes for AI Prompts
+
 - Refer to this file for service names, ports, mounts, and theme paths.
 - Assume Composer autoload is present and classes resolve via `vendor/autoload.php` loaded by `inc/loader.php`.
 - When implementing new features:
