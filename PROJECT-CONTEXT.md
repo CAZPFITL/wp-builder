@@ -91,7 +91,7 @@ Folder: `themes/travel-concierge-me-theme/classes/`
 - `BlocksManager.php` → Registers Gutenberg custom blocks, server-side render callbacks, and block categories. Loads block assets produced by WordPress (`*.asset.php`).
 
 - `Database/` → Migrations/table managers and `CliMigration.php` for WP‑CLI (`my-wp-tables-migrate`).
-- `Endpoints/` → REST endpoints (e.g., FormsEntries).
+- `Endpoints/` → REST endpoints (e.g., `FormsEntries`, `TBOHotel` for external API integration).
 - `PostTypes/`, `Taxonomies/`, `Traits/` → CPT/taxonomies and shared helpers.
 
 Conventions:
@@ -214,6 +214,66 @@ docker compose exec wordpress bash -lc 'cd /var/www/html/wp-content/themes/$ACTI
 # Check Vite logs
 docker compose logs -f vite
 ```
+
+## External API Integration: TBOH Hotel API
+
+The theme integrates with the TBOH Hotel API for hotel search functionality.
+
+### Configuration
+
+API credentials are stored securely in `.env`:
+
+```env
+TBOH_API_URL=http://api.tbotechnology.in/TBOHolidays_HotelAPI
+TBOH_API_USERNAME=travelconciergeTest
+TBOH_API_PASSWORD=Mar@52684151
+```
+
+### Endpoint
+
+- **Class**: `TBOHotelEndpoint` (`classes/Endpoints/TBOHotel/Endpoint.php`)
+- **Base Route**: `/wp-json/tcm/v1/`
+- **Routes**:
+  - `POST /hotel-search` → Search for hotels with availability
+  - `GET /hotel-destinations` → Get list of available destination cities
+
+### Hotel Search Request
+
+```json
+{
+  "destination": "Cancún",
+  "checkIn": "25-12-2025",
+  "checkOut": "28-12-2025",
+  "rooms": 1,
+  "adults": 2,
+  "children": 0,
+  "hotelName": "Optional Hotel Name"
+}
+```
+
+### JavaScript Module
+
+Hotel search functionality is implemented as a modular component:
+- **Module**: `assets/scripts/modules/hotelSearch.js`
+- **Imported in**: `assets/scripts/front.js`
+- **Features**:
+  - Destination autocomplete with TBOH city codes
+  - Automatic loading of all hotels when city is selected
+  - Client-side filtering for performance
+  - Console logging for debugging
+  - Integrated with WordPress REST API nonce
+
+The module only initializes if `#hotel-search-form` exists on the page, making it safe to load globally.
+
+### Security
+
+- Requires valid `X-WP-Nonce` header with `wp_rest` nonce
+- User must have `edit_posts` capability
+- Credentials loaded from environment (not hardcoded)
+
+### Testing
+
+Use the **Playground** page template (`page-playground.php`) to test both Forms Entries and Hotel Search endpoints interactively.
 
 ## Notes for AI Prompts
 

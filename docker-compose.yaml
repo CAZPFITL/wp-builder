@@ -14,6 +14,9 @@ services:
       VITE_PORT: ${VITE_PORT}
       WP_ENV: ${WP_ENV}
       PREFIX: ${PREFIX}
+      TBOH_API_URL: ${TBOH_API_URL}
+      TBOH_API_USERNAME: ${TBOH_API_USERNAME}
+      TBOH_API_PASSWORD: ${TBOH_API_PASSWORD}
     volumes:
       - wordpress_data:/var/www/html
       - ./themes/${ACTIVE_THEME}:/var/www/html/wp-content/themes/${ACTIVE_THEME}
