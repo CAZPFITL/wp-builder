@@ -141,14 +141,20 @@ Si agregas/mueves clases, actualiza el índice de autoload:
 docker compose exec wordpress bash -lc 'cd /var/www/html/wp-content/themes/$ACTIVE_THEME && composer dump-autoload -o'
 ```
 
+Ejemplo explícito (usa el nombre del tema y la opción `-T` para TTY-less exec):
+
+```bash
+docker compose exec -T wordpress sh -lc "cd wp-content/themes/travel-concierge-me-theme && composer dump-autoload -o"
+```
+
 Notas:
 
 - Asegúrate de que `.env` tenga `ACTIVE_THEME` apuntando a la carpeta de tu tema (por ejemplo, `ACTIVE_THEME=theme`).
 - Si no existe `composer.json` en el tema, no se generará `vendor/` y se saltará la instalación.
 
-## Instalación automática de plugins del tema (WP‑CLI)
+## Instalación automática de plugins del tema (WP-CLI)
 
-Este proyecto instala automáticamente los plugins requeridos definidos por tu tema activo usando WP‑CLI. La definición se toma de `themes/<ACTIVE_THEME>/required-plugins.json`.
+Este proyecto instala automáticamente los plugins requeridos definidos por tu tema activo usando WP-CLI. La definición se toma de `themes/<ACTIVE_THEME>/required-plugins.json`.
 
 • Cuándo corre
 
@@ -176,7 +182,7 @@ Coloca un archivo `required-plugins.json` en el directorio del tema activo. Ejem
 • Cómo se interpreta
 
 - `configuration.required_plugins`: lista prioritaria de slugs a instalar (y su orden). Si no existe, se usan `plugins[].name`.
-- `plugins[].activate`: activa por‑plugin; tiene prioridad sobre `auto_activate` global.
+- `plugins[].activate`: activa por-plugin; tiene prioridad sobre `auto_activate` global.
 - `configuration.auto_activate`: activa todos los instalados, salvo que el plugin tenga `activate: false`.
 - `configuration.skip_existing`: si es `true`, no reinstala plugins ya presentes (pero puede activarlos si corresponde).
 - `configuration.update_existing`: si es `true`, fuerza reinstalación/actualización (`--force`).
@@ -191,5 +197,58 @@ docker compose exec wordpress bash -lc "/usr/local/bin/install-required-plugins.
 
 • Requisitos internos
 
-- WP‑CLI y `jq` están preinstalados en la imagen de `wordpress` de este proyecto.
+- WP-CLI y `jq` están preinstalados en la imagen de `wordpress` de este proyecto.
 - La variable `.env` `ACTIVE_THEME` debe apuntar a la carpeta del tema activo.
+
+## Envío de correos en desarrollo (Mailpit + WP Mail SMTP)
+
+El proyecto está preparado para usar un contenedor `mailer` basado en [Mailpit](https://github.com/axllent/mailpit) como servidor SMTP de desarrollo. Esto permite capturar todos los correos que envía WordPress sin que salgan a Internet.
+
+### Configuración en Docker
+
+En el `docker-compose.yml` se define un servicio similar a:
+
+```yaml
+mailer:
+  image: axllent/mailpit
+  restart: unless-stopped
+  ports:
+    - "8025:8025"   # UI web de Mailpit (bandeja de prueba)
+    - "1025:1025"   # Puerto SMTP usado por WordPress
+```
+
+WordPress y `mailer` comparten la misma red de Docker, por lo que desde WordPress el host `mailer` se resuelve automáticamente al contenedor de Mailpit.
+
+### Configuración en WP Mail SMTP
+
+Dentro del panel de WordPress:
+
+1. Ve a **WP Mail SMTP → Settings**.
+2. En la sección **Mailer**, selecciona **Other SMTP**.
+3. En la sección **Other SMTP**, configura:
+
+   - **SMTP Host:** `mailer`
+   - **SMTP Port:** `1025`
+   - **Encryption:** `None`
+   - **Authentication:** OFF
+
+Guarda los cambios y usa la pestaña **Email Test** para enviar un correo de prueba. Si ves el mensaje **Success!**, WordPress ha entregado el correo correctamente al contenedor `mailer`.
+
+### Dónde se ven los correos
+
+En desarrollo, los correos **no llegarán a tu bandeja real (Gmail, Outlook, etc.)**. Se quedan capturados en Mailpit.
+
+Para verlos, abre en tu navegador:
+
+- <http://localhost:8025>
+
+Ahí aparecerán todos los correos enviados por WordPress (incluido el test de WP Mail SMTP).
+
+### Enviar correos a una bandeja real
+
+Si quieres que los correos lleguen a una bandeja de entrada real (producción):
+
+- Configura WP Mail SMTP para usar un proveedor SMTP real (por ejemplo SendGrid, Brevo, Mailgun, Gmail/Workspace o el SMTP de tu hosting), **en lugar** de `Other SMTP` con `mailer`, o
+- Configura Mailpit como relay hacia un SMTP externo (configuración avanzada y fuera del alcance de este README).
+
+De esta forma, en local puedes trabajar de forma segura con Mailpit y, en producción, cambiar solo la configuración de WP Mail SMTP para usar un servidor SMTP real sin modificar el código del tema ni de los plugins.

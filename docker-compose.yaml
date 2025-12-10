@@ -14,6 +14,9 @@ services:
       VITE_PORT: ${VITE_PORT}
       WP_ENV: ${WP_ENV}
       PREFIX: ${PREFIX}
+      TBOH_API_URL: ${TBOH_API_URL}
+      TBOH_API_USERNAME: ${TBOH_API_USERNAME}
+      TBOH_API_PASSWORD: ${TBOH_API_PASSWORD}
     volumes:
       - wordpress_data:/var/www/html
       - ./themes/${ACTIVE_THEME}:/var/www/html/wp-content/themes/${ACTIVE_THEME}
@@ -65,6 +68,31 @@ services:
     depends_on:
       - php
 
+  # blocks:
+  #   image: node:18
+  #   working_dir: /app/blocks
+  #   user: "1000:1000"
+  #   volumes:
+  #     - ./themes/${ACTIVE_THEME}/blocks:/app/blocks
+  #   command: ["sh", "-c", "cd forms-entries && npm install && npm run dev"]
+  #   ports:
+  #     - "${VITE_PORT_BLOCKS:-4174}:4174"
+  #   depends_on:
+  #     - php
+
+  mailer:
+    image: axllent/mailpit
+    restart: unless-stopped
+    ports:
+      - "8025:8025"   # UI web de Mailpit (para ver los correos)
+      - "1025:1025"   # Puerto SMTP
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_DATA_FILE: /data/mailpit.db
+    volumes:
+      - mailer_data:/data
+
 volumes:
   wordpress_data:
   db_data:
+  mailer_data:
