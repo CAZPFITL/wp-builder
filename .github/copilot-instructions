@@ -1,0 +1,53 @@
+# Instrucciones para GitHub Copilot / asistentes automáticos
+
+Estas instrucciones están pensadas para asistentes (Copilot, ChatGPT integrados, o humanos automatizados) que trabajan en este repositorio.
+
+Objetivo general
+- Proveer contexto y reglas claras para editar, crear y probar código en este proyecto "travel-concierge-me-builder".
+- Priorizar cambios locales y pequeños, manteniendo la coherencia con la arquitectura existente.
+- Todos los comentarios de codigo mas no los toasts son en ingles.
+
+Contexto del proyecto (resumen)
+- Stack: Docker Compose (WordPress, PHP-FPM, Nginx opcional, MySQL, Vite para assets).
+- Tema activo: `themes/travel-concierge-me-theme` (montado en el contenedor WordPress).
+- Assets: `themes/<ACTIVE_THEME>/assets/` gestionados por Vite. En desarrollo: `docker compose up -d vite`.
+- PHP: Composer-first. Las clases se cargan vía `vendor/autoload.php` y la carpeta `classes/`.
+
+Convenciones y prioridades
+- Mantener `functions.php` mínimo; preferir clases en `classes/` usando el patrón Base/Singleton.
+- Añadir lógica PHP en `classes/` y registrar hooks en `register_actions()` / `register_filters()`.
+- Para nuevos campos o formularios, reutilizar partials en `templates/partials/forms/` y estilos en `assets/styles/components/forms.scss`.
+- Para cambios en JS/CSS: añadir archivos bajo `assets/` y registrar mediante la clase `Enqueue.php` del tema.
+
+Cómo trabajar (pasos prácticos)
+1. Inspeccionar el archivo o la clase objetivo en `themes/travel-concierge-me-theme/`.
+2. Si vas a crear/editar PHP: seguir el autoload/composer-first pattern y no romper firmas públicas.
+3. Usar `apply_patch` (o el flujo de commits del repositorio) para cambios pequeños y precisos.
+4. Ejecutar comandos en contenedores cuando sea necesario. Ejemplos comunes:
+
+```bash
+docker compose up --build -d
+docker compose run --rm vite npm install
+docker compose up -d vite        # Vite dev
+docker compose run --rm vite npm run build
+docker compose exec wordpress bash -lc 'cd /var/www/html/wp-content/themes/$ACTIVE_THEME && composer dump-autoload -o'
+```
+
+Buenas prácticas específicas
+- Reutilizar partials de formularios: `templates/partials/forms/text-input.php`, `select.php`, etc. Mantén los `id` y `name` para compatibilidad con JS existente.
+- Para búsqueda/autocompletado: conservar contenedores DOM (p. ej. #destination-suggestions) que el JS espera.
+- No formatear archivos no relacionados ni cambiar estilos globales sin motivo.
+- Mantener commits pequeños y descriptivos.
+
+Seguridad y credenciales
+- No incluir secretos en el repo. Las credenciales externas (TBOH API) se configuran en `.env` y se leen desde PHP.
+
+Preguntas frecuentes para el asistente
+- ¿Debo ejecutar tests? Sí, cuando se modifiquen funcionalidades críticas o cuando el repo incluya pruebas.
+- ¿Puedo cambiar la arquitectura? No sin discutirlo; proponer PRs y justificar las razones.
+
+Contacto y verificación
+- Después de aplicar cambios mayores, ofrecer pasos claros para probar localmente (comandos Docker/Vite/composer).
+
+---
+Archivo auto-generado por petición del mantenedor el: 2025-12-09
