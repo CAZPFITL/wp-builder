@@ -252,3 +252,28 @@ Si quieres que los correos lleguen a una bandeja de entrada real (producción):
 - Configura Mailpit como relay hacia un SMTP externo (configuración avanzada y fuera del alcance de este README).
 
 De esta forma, en local puedes trabajar de forma segura con Mailpit y, en producción, cambiar solo la configuración de WP Mail SMTP para usar un servidor SMTP real sin modificar el código del tema ni de los plugins.
+
+
+
+
+
+{
+  "CheckIn": "2025-12-20",
+  "CheckOut": "2025-12-21",
+  "HotelCodes": "1247101",
+  "GuestNationality": "AE",
+  "PaxRooms": [
+    {
+      "Adults": 2,
+      "Children": 0,
+      "ChildrenAges": []
+    }
+  ],
+  "ResponseTime": 23,
+  "IsDetailedResponse": false,
+  "Filters": {
+    "Refundable": false,
+    "NoOfRooms": 0,
+    "MealType": "All"
+  }
+}

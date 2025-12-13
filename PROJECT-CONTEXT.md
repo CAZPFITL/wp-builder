@@ -254,7 +254,7 @@ TBOH_API_PASSWORD=Mar@52684151
 ### JavaScript Module
 
 Hotel search functionality is implemented as a modular component:
-- **Module**: `assets/scripts/modules/hotelSearch.js`
+- **Module**: `assets/scripts/modules/tboHotelSearch.js`
 - **Imported in**: `assets/scripts/front.js`
 - **Features**:
   - Destination autocomplete with TBOH city codes
