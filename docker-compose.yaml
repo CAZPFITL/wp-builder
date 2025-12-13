@@ -75,8 +75,6 @@ services:
     volumes:
       - ./themes/${ACTIVE_THEME}/blocks:/app/blocks
     command: ["sh", "-c", "cd forms-entries && npm install && npm run dev"]
-    ports:
-      - "${VITE_PORT_BLOCKS}:${VITE_PORT_BLOCKS}"
     depends_on:
       - wordpress
 
