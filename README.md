@@ -253,27 +253,54 @@ Si quieres que los correos lleguen a una bandeja de entrada real (producción):
 
 De esta forma, en local puedes trabajar de forma segura con Mailpit y, en producción, cambiar solo la configuración de WP Mail SMTP para usar un servidor SMTP real sin modificar el código del tema ni de los plugins.
 
+## Release y Empaquetado de Temas
 
+### Crear ZIP para Producción
 
+Para empaquetar el tema activo y subirlo a producción:
 
+```bash
+sh ./themes/<ACTIVE_THEME>/scripts/package-theme.sh
+```
 
-{
-  "CheckIn": "2025-12-20",
-  "CheckOut": "2025-12-21",
-  "HotelCodes": "1247101",
-  "GuestNationality": "AE",
-  "PaxRooms": [
-    {
-      "Adults": 2,
-      "Children": 0,
-      "ChildrenAges": []
-    }
-  ],
-  "ResponseTime": 23,
-  "IsDetailedResponse": false,
-  "Filters": {
-    "Refundable": false,
-    "NoOfRooms": 0,
-    "MealType": "All"
-  }
-}
+Este script automáticamente:
+
+1. Compila assets (Vite + Gutenberg blocks)
+2. **Valida manifest.json** para prevenir errores de CSS/JS en producción
+3. Excluye archivos de desarrollo (.vite, node_modules, etc.)
+4. Crea ZIP optimizado en la raíz del tema
+
+### Validación de Manifest (Preventivo)
+
+El sistema incluye validación automática que previene un bug crítico donde los estilos no cargan en producción debido a mismatch de keys en `manifest.json`.
+
+**Script de validación:**
+
+```bash
+bash ./themes/<ACTIVE_THEME>/scripts/validate-manifest.sh
+```
+
+**Qué valida:**
+
+- Keys CSS/JS en `manifest.json` coinciden con las usadas en `Enqueue.php`
+- Archivos compilados existen físicamente en `assets/dist/`
+- Reporta tamaños de archivo para auditoría
+
+**Regla importante:** En `Enqueue.php`, usar **extensiones fuente** (`.scss`, `.js`) no extensiones compiladas (`.css`, `.min.js`):
+
+```php
+// ✅ Correcto
+tcm_get_asset('styles/front.scss')
+
+// ❌ Incorrecto
+tcm_get_asset('styles/front.css')
+```
+
+### Checklist Pre-Release
+
+- [ ] Ejecutar `tcm-build` (alias de docker compose para compilar assets)
+- [ ] Verificar que validación pasa (se ejecuta automáticamente en package-theme.sh)
+- [ ] Probar ZIP en staging si está disponible
+- [ ] Subir a producción
+
+**Documentación completa:** Ver `themes/<ACTIVE_THEME>/PREVENTIVE-MEASURES.md` y `themes/<ACTIVE_THEME>/docs/manifest-keys-reference.md`

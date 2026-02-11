@@ -1,53 +1,615 @@
-# Instrucciones para GitHub Copilot / asistentes automáticos
+# GitHub Copilot Instructions for Travel Concierge Me Builder
 
-Estas instrucciones están pensadas para asistentes (Copilot, ChatGPT integrados, o humanos automatizados) que trabajan en este repositorio.
-
-Objetivo general
-- Proveer contexto y reglas claras para editar, crear y probar código en este proyecto "travel-concierge-me-builder".
-- Priorizar cambios locales y pequeños, manteniendo la coherencia con la arquitectura existente.
-- Todos los comentarios de codigo mas no los toasts son en ingles.
-
-Contexto del proyecto (resumen)
-- Stack: Docker Compose (WordPress, PHP-FPM, Nginx opcional, MySQL, Vite para assets).
-- Tema activo: `themes/travel-concierge-me-theme` (montado en el contenedor WordPress).
-- Assets: `themes/<ACTIVE_THEME>/assets/` gestionados por Vite. En desarrollo: `docker compose up -d vite`.
-- PHP: Composer-first. Las clases se cargan vía `vendor/autoload.php` y la carpeta `classes/`.
-
-Convenciones y prioridades
-- Mantener `functions.php` mínimo; preferir clases en `classes/` usando el patrón Base/Singleton.
-- Añadir lógica PHP en `classes/` y registrar hooks en `register_actions()` / `register_filters()`.
-- Para nuevos campos o formularios, reutilizar partials en `templates/partials/forms/` y estilos en `assets/styles/components/forms.scss`.
-- Para cambios en JS/CSS: añadir archivos bajo `assets/` y registrar mediante la clase `Enqueue.php` del tema.
-
-Cómo trabajar (pasos prácticos)
-1. Inspeccionar el archivo o la clase objetivo en `themes/travel-concierge-me-theme/`.
-2. Si vas a crear/editar PHP: seguir el autoload/composer-first pattern y no romper firmas públicas.
-3. Usar `apply_patch` (o el flujo de commits del repositorio) para cambios pequeños y precisos.
-4. Ejecutar comandos en contenedores cuando sea necesario. Ejemplos comunes:
-
-```bash
-docker compose up --build -d
-docker compose run --rm vite npm install
-docker compose up -d vite        # Vite dev
-docker compose run --rm vite npm run build
-docker compose exec wordpress bash -lc 'cd /var/www/html/wp-content/themes/$ACTIVE_THEME && composer dump-autoload -o'
-```
-
-Buenas prácticas específicas
-- Reutilizar partials de formularios: `templates/partials/forms/text-input.php`, `select.php`, etc. Mantén los `id` y `name` para compatibilidad con JS existente.
-- Para búsqueda/autocompletado: conservar contenedores DOM (p. ej. #destination-suggestions) que el JS espera.
-- No formatear archivos no relacionados ni cambiar estilos globales sin motivo.
-- Mantener commits pequeños y descriptivos.
-
-Seguridad y credenciales
-- No incluir secretos en el repo. Las credenciales externas (TBOH API) se configuran en `.env` y se leen desde PHP.
-
-Preguntas frecuentes para el asistente
-- ¿Debo ejecutar tests? Sí, cuando se modifiquen funcionalidades críticas o cuando el repo incluya pruebas.
-- ¿Puedo cambiar la arquitectura? No sin discutirlo; proponer PRs y justificar las razones.
-
-Contacto y verificación
-- Después de aplicar cambios mayores, ofrecer pasos claros para probar localmente (comandos Docker/Vite/composer).
+**Last Updated:** December 27, 2025  
+**Project:** Travel Concierge Me Builder (WordPress + TBO Hotel API Integration)
 
 ---
-Archivo auto-generado por petición del mantenedor el: 2025-12-09
+
+## 📋 Project Overview
+
+### General Objective
+Provide clear context and rules for editing, creating, and testing code in the "travel-concierge-me-builder" project. Prioritize local, small changes while maintaining consistency with existing architecture.
+
+### Stack & Infrastructure
+- **Docker Compose:** WordPress, PHP-FPM, Nginx (optional), MySQL, Vite for assets
+- **Active Theme:** `themes/travel-concierge-me-theme` (mounted in WordPress container)
+- **Assets:** Managed by Vite in `themes/<ACTIVE_THEME>/assets/`
+  - Development: `docker compose up -d vite`
+  - Build: `docker compose run --rm vite npm run build`
+- **PHP:** Composer-first approach
+  - Classes loaded via `vendor/autoload.php` and `classes/` folder
+  - PHP 8.0+ with Composer autoloading (classmap)
+- **WordPress:** 6.4+ with Gutenberg blocks
+- **Frontend:** JavaScript (ES6+), SCSS with BEM methodology
+- **External API:** TBO Hotel API v2.1 for booking operations
+
+### Language Standards
+- **Code comments:** English only
+- **User-facing messages (toasts, UI text):** Can be in Spanish or i18n
+
+### 🔴 CRITICAL: Canonical Data Format Rules
+
+**ALL API request/response data MUST use camelCase for field names.**
+
+#### ✅ CORRECT - Canonical Data (camelCase)
+```php
+$canonical = [
+    'checkIn'     => '2024-01-15',
+    'checkOut'    => '2024-01-20',
+    'hotelCode'   => 'HTL123',
+    'cityCode'    => 'NYC',
+    'nationality' => 'US',
+    'paxRooms'    => [
+        [
+            'adults'       => 2,
+            'children'     => 1,
+            'childrenAges' => [5]
+        ]
+    ],
+    'perPage'     => 10
+];
+```
+
+#### ❌ FORBIDDEN - Never use snake_case in data fields
+```php
+// NEVER DO THIS:
+$wrong = [
+    'check_in'   => '...',  // ❌ WRONG
+    'hotel_code' => '...',  // ❌ WRONG
+    'city_code'  => '...',  // ❌ WRONG
+    'pax_rooms'  => [],     // ❌ WRONG
+    'per_page'   => 10      // ❌ WRONG
+];
+```
+
+#### Exception: PHP Internal Variables (OK)
+```php
+// ✅ PHP variable names can use snake_case (WordPress standard)
+$pax_rooms = $payload['paxRooms'];   // Variable name OK
+$hotel_code = $data['hotelCode'];    // Variable name OK
+
+// ✅ Database columns can be snake_case
+// country_name, city_name_norm, etc.
+
+// BUT the array KEY must ALWAYS be camelCase
+$response = ['hotelCode' => $hotel_code];  // ✅ CORRECT
+```
+
+#### Naming Convention Summary
+
+| Context | Format | Example |
+|---------|--------|---------|
+| API request params | **camelCase** | `cityCode`, `checkIn` |
+| API response fields | **camelCase** | `hotelCode`, `countryName` |
+| Route args | **camelCase** | `'args' => ['cityCode' => [...]]` |
+| Database columns | snake_case | `country_name`, `city_code` |
+| PHP variables | snake_case | `$city_code`, `$pax_rooms` |
+| Legacy TBO input | PascalCase | `CheckIn`, `GuestNationality` |
+
+**When in doubt: camelCase for ALL data fields. Zero exceptions.**
+
+---
+
+## 🏗️ Architecture Patterns
+
+### Theme Architecture
+
+```
+themes/travel-concierge-me-theme/
+├── assets/
+│   ├── scripts/          → JS modules, classes
+│   ├── styles/           → SCSS (BEM structure)
+│   └── public/           → Static assets
+├── blocks/src/blocks/    → Gutenberg blocks
+├── classes/              → PHP classes (Composer autoload)
+│   ├── Admin/            → Bootstrapping, initialization
+│   ├── Base/             → Abstract base classes, traits
+│   ├── Blocks/           → Block registration
+│   ├── Database/         → Custom tables, migrations
+│   ├── Endpoints/        → REST API endpoints
+│   ├── PostTypes/        → Custom post types
+│   ├── Taxonomies/       → Custom taxonomies
+│   └── Users/            → User management
+├── docs/                 → Complete documentation
+├── inc/                  → Helper functions, loaders
+├── sections/             → Reusable template parts
+├── templates/            → Page templates
+└── functions.php         → Theme entry point (minimal)
+```
+
+### Class Loading
+
+**Pattern:** All classes extend `Base` and use `Singleton` trait. Initialization happens in `Admin::load_instances()`.
+
+```php
+// Example: Creating a new class
+class MyClass extends Base {
+    use Singleton;
+    
+    public function init(): void {
+        parent::init();
+        // Your initialization
+    }
+    
+    public function register_actions(): void {
+        $this->add_action('hook_name', 'method_name');
+    }
+}
+```
+
+**Reference:** [`themes/travel-concierge-me-theme/docs/class-loading-architecture.md`](themes/travel-concierge-me-theme/docs/class-loading-architecture.md)
+
+### REST API Endpoints
+
+Endpoints extend `BaseEndpoint` and register via `rest_api_init` hook:
+
+```php
+class MyEndpoint extends BaseEndpoint {
+    public function register_routes(): void {
+        register_rest_route('tcm/v1', '/my-resource', [
+            'methods' => 'POST',
+            'callback' => [$this, 'handle_request'],
+            'permission_callback' => [$this, 'permission'],
+        ]);
+    }
+}
+```
+
+**Key endpoints:**
+- `POST /tcm/v1/booking-session` — Create checkout session
+- `POST /tcm/v1/booking/prebook` — TBO PreBook (hold reservation)
+- `POST /tcm/v1/booking/book` — TBO Book (confirm reservation)
+- `GET /tcm/v1/booking/detail/{id}` — Get booking details
+- `POST /tcm/v1/booking/cancel/{id}` — Cancel booking
+
+**Reference:** [`themes/travel-concierge-me-theme/docs/endpoints-architecture.md`](themes/travel-concierge-me-theme/docs/endpoints-architecture.md)
+
+### Database Migrations
+
+Custom tables use `BaseTable` + `BaseMigration` pattern:
+
+```php
+// classes/Database/MyTable/Table.php
+class MyTable extends BaseTable {
+    protected $tableSlug = 'my_table';
+}
+
+// classes/Database/MyTable/Migration.php
+class MyTableMigration extends BaseMigration {
+    protected $tableSlug = 'my_table';
+    protected $migrations = [
+        ['version' => 2025010101, 'sql' => 'CREATE TABLE %s ...']
+    ];
+}
+```
+
+**Reference:** [`themes/travel-concierge-me-theme/docs/database-architecture.md`](themes/travel-concierge-me-theme/docs/database-architecture.md)
+
+### Booking Session System
+
+The **BookingSession** manages temporary state for hotel checkout flow:
+
+```
+Search → Create Session → PreBook → Book → BookingDetail
+          ↓ session_id    ↓ BlockRoomId  ↓ BookingId
+```
+
+**Key identifiers:**
+- `session_id` (UUID) — Local WordPress session (NOT sent to TBO)
+- `BookingCode` — From TBO Search, identifies room option
+- `BlockRoomId` — From TBO PreBook, holds reservation
+- `BookingId` — From TBO Book, final confirmation
+
+**Reference:** [`themes/travel-concierge-me-theme/docs/booking-session-architecture.md`](themes/travel-concierge-me-theme/docs/booking-session-architecture.md)
+
+---
+
+## 🔧 Development Workflow
+
+### How to Work (Practical Steps)
+
+1. **Inspect target file/class** in `themes/travel-concierge-me-theme/`
+2. **For PHP changes:** Follow autoload/composer-first pattern, don't break public signatures
+3. **Use small, precise commits:** Apply patches or commit flows for targeted changes
+4. **Run container commands when needed:**
+
+```bash
+# Start/rebuild all services
+docker compose up --build -d
+
+# Install npm dependencies
+docker compose run --rm vite npm install
+
+# Start Vite dev server
+docker compose up -d vite
+
+# Build production assets
+docker compose run --rm vite npm run build
+
+# Regenerate Composer autoload
+docker compose exec wordpress bash -lc 'cd /var/www/html/wp-content/themes/$ACTIVE_THEME && composer dump-autoload -o'
+
+# WordPress CLI commands
+docker compose exec wordpress wp {command}
+```
+
+### Conventions and Priorities
+
+**PHP:**
+- Keep `functions.php` minimal
+- Prefer classes in `classes/` using Base/Singleton pattern
+- Add logic in classes, register hooks in `register_actions()` / `register_filters()`
+- Follow WordPress Coding Standards (tabs, braces on same line, single quotes)
+- Use type hints and DocBlocks
+
+**Forms & Templates:**
+- Reuse partials: `templates/partials/forms/text-input.php`, `select.php`, etc.
+- Maintain `id` and `name` attributes for JS compatibility
+- Preserve DOM containers (e.g., `#destination-suggestions`) expected by existing JS
+
+**JavaScript:**
+- ES6+ features: `const`/`let`, arrow functions, async/await
+- Add files under `assets/scripts/` and register via `Enqueue.php`
+- Use full BEM class names in selectors (no string concatenation)
+
+**CSS/SCSS:**
+- Follow BEM methodology strictly
+- Add files under `assets/styles/` and register via `Enqueue.php`
+- Don't format unrelated files or change global styles without reason
+
+**General:**
+- Don't format unrelated files
+- Keep commits small and descriptive
+- Test changes locally before committing
+
+---
+
+## 📝 Code Style & Conventions
+
+### BEM Methodology (CSS/SCSS)
+
+```scss
+.block-name {                    // Block
+  &__element { }                 // Element
+  &__element--modifier { }       // Modifier
+}
+```
+
+**JavaScript selectors:**
+```javascript
+// ✅ Correct
+document.querySelector('.tcm-hotel-results__card--template')
+
+// ❌ Wrong
+document.querySelector('.tcm-hotel-results .' + 'card')
+```
+
+**References:**
+- [`themes/travel-concierge-me-theme/docs/bem-conventions.md`](themes/travel-concierge-me-theme/docs/bem-conventions.md)
+- [`themes/travel-concierge-me-theme/docs/bem-naming.md`](themes/travel-concierge-me-theme/docs/bem-naming.md)
+
+### PHP Code Standards
+
+```php
+/**
+ * Short description
+ *
+ * @param string $param Description
+ * @return array Description
+ * @since 2025.12.27
+ */
+public function my_function(string $param): array {
+    return [];
+}
+```
+
+**Reference:** [`themes/travel-concierge-me-theme/docs/code-documentation-guidelines.md`](themes/travel-concierge-me-theme/docs/code-documentation-guidelines.md)
+
+---
+
+## 🧪 Testing Procedures
+
+### Test Execution Rules
+
+**CRITICAL:** Every test execution MUST be logged in `tests/TEST_LOG.md`
+
+**Required log information:**
+- ✅ Date and time (UTC)
+- ✅ Test name and type (unit/integration)
+- ✅ Status (PASSED/FAILED/PARTIAL)
+- ✅ Duration
+- ✅ Key metrics (booking IDs, confirmations, steps passed)
+- ✅ Bugs found and fixes applied
+- ✅ Output file location (JSON)
+
+**Log format template:** See [`tests/TEST_LOG.md`](themes/travel-concierge-me-theme/tests/TEST_LOG.md)
+
+### Test Organization
+
+```
+tests/
+├── TEST_LOG.md                    ← 📋 Execution log (ALWAYS update)
+├── instances/                     ← 📦 JSON outputs by test name
+│   ├── tbo-booking-flow/
+│   ├── tbo-booking-with-cancel/
+│   ├── test-booking-integration/
+│   ├── test-rest-endpoints/
+│   └── test-user-booking-queries/
+├── integration/                   ← 🔗 Integration tests
+│   ├── tbo-booking-flow-test.php
+│   ├── tbo-booking-with-cancel-test.php
+│   ├── test-booking-integration.php
+│   ├── test-rest-endpoints.php
+│   └── test-user-booking-queries.php
+└── unit/                          ← 🧪 Unit tests
+    ├── test-booking-adapter.php
+    └── test-booking-repository.php
+```
+
+### Running Tests
+
+**Unit Tests:**
+```bash
+# Booking Adapter
+docker-compose exec -T wordpress php /var/www/html/wp-content/themes/travel-concierge-me-theme/tests/unit/test-booking-adapter.php
+
+# Booking Repository
+docker-compose exec -T wordpress php /var/www/html/wp-content/themes/travel-concierge-me-theme/tests/unit/test-booking-repository.php
+```
+
+**Integration Tests:**
+```bash
+# Full booking flow (Search → PreBook → Book → Detail)
+docker-compose exec -T wordpress php /var/www/html/wp-content/themes/travel-concierge-me-theme/tests/integration/tbo-booking-flow-test.php
+
+# Booking with cancellation
+docker-compose exec -T wordpress php /var/www/html/wp-content/themes/travel-concierge-me-theme/tests/integration/tbo-booking-with-cancel-test.php
+```
+
+**After each test:**
+1. Check exit status and output
+2. Verify JSON saved in `tests/instances/[test-name]/`
+3. **Update `tests/TEST_LOG.md` immediately**
+4. Document bugs found and fixes applied
+
+### Test Coverage
+
+**Unit Tests:**
+- ✅ **Booking Adapter** (`TboBookingAdapter`) — Normalizes TBO API responses
+  - Status mapping (7 TBO statuses → 5 canonical)
+  - Guest normalization (lead detection, type mapping)
+  - Item normalization (rooms, pricing, meal types)
+  - Refs extraction (confirmation, invoice, provider_booking_id)
+  
+- ✅ **Booking Repository** (`BookingRepository`) — Database CRUD operations
+  - Idempotency key calculation (SHA-256 hash)
+  - Create/read/update bookings
+  - Upsert guests, items, refs, events
+  - User booking queries with filters
+
+**Integration Tests:**
+- ✅ **TBO Booking Flow** — Complete reservation process
+  - Search hotels (TBO /Search)
+  - Create session (WordPress transient)
+  - PreBook (TBO /Prebook + DB persistence)
+  - Update guest details
+  - Book (TBO /Book + DB update)
+  - Get booking details (TBO /BookingDetail)
+  - Database validation after each step
+  
+- ✅ **TBO Booking with Cancel** — Full flow + cancellation
+  - All steps from booking flow
+  - Cancel booking (TBO /Cancel)
+  - Verify cancellation status
+
+### Database Validation
+
+Integration tests validate 5 database tables:
+
+1. **tcm_bookings** — Main booking record
+   - Fields: booking_uuid, session_id, status, confirmation_code, etc.
+   - Validations: draft status after PreBook, confirmed after Book
+   
+2. **tcm_booking_guests** — Guest details
+   - Optional at PreBook, populated by BookingDetail
+   
+3. **tcm_booking_items** — Room/item details
+   - Optional at PreBook, populated by BookingDetail
+   
+4. **tcm_booking_refs** — External references
+   - Confirmation codes, invoice numbers, provider IDs
+   
+5. **tcm_booking_status_events** — Audit trail
+   - Logs: prebook, book, cancel events with payloads
+
+### General Endpoint Testing
+
+**Always follow these steps when testing ANY endpoint:**
+
+1. **Get valid WordPress nonce:**
+   ```javascript
+   // In browser console
+   const nonce = wpApiSettings.nonce;
+   console.log('Nonce:', nonce);
+   ```
+
+2. **Test with curl:**
+   ```bash
+   curl -X POST http://localhost:8080/wp-json/tcm/v1/endpoint \
+     -H "Content-Type: application/json" \
+     -H "X-WP-Nonce: YOUR_NONCE" \
+     -d '{"param": "value"}' | jq '.'
+   ```
+
+3. **Validate response:**
+   - Check HTTP status (200 = success)
+   - Verify response structure
+   - Test error cases (400, 401, 403, 404, 500)
+
+**Complete guide:** [`themes/travel-concierge-me-theme/docs/endpoint-testing-guide.md`](themes/travel-concierge-me-theme/docs/endpoint-testing-guide.md)
+
+### TBO Booking Flow Testing
+
+**CRITICAL:** TBO booking flow is **sequential** — each step depends on previous step's output.
+
+**Complete flow:**
+```bash
+# 1. Search → BookingCode
+# 2. Create session → session_id
+# 3. Update session with guest details
+# 4. PreBook → BlockRoomId
+# 5. Book → BookingId
+# 6. BookingDetail or Cancel
+```
+
+**Test data:**
+- Test hotel: `1247101` (TBO official test hotel)
+- Dates: 30+ days from today
+- Nationality: `MX`, `US`, or `CA`
+- Guest data: Fake only (never real customer data)
+
+**Complete guide with executable script:** [`themes/travel-concierge-me-theme/docs/tbo-flow-testing-guide.md`](themes/travel-concierge-me-theme/docs/tbo-flow-testing-guide.md)
+
+---
+
+## 🔒 Security & Best Practices
+
+### Never Expose Credentials
+
+**❌ NEVER include in code or responses:**
+- TBO API credentials (`TBOH_API_USERNAME`, `TBOH_API_PASSWORD`)
+- Production BookingIds or customer data
+- Real payment information
+- WordPress nonces in logs
+
+**✅ ALWAYS:**
+- Use environment variables from `.env`
+- Use placeholders in documentation: `{{TBOH_API_USERNAME}}`
+- Test in development environment only
+- No secrets in repository
+
+### Security Checklist
+- ✅ Credentials in `.env` (never committed)
+- ✅ `.env` listed in `.gitignore`
+- ✅ `WP_DEBUG` only in development
+- ✅ HTTPS in production
+- ✅ Rotate credentials if exposed
+- ✅ Payment integrations: use tokenization (never store CVV/cards)
+
+---
+
+## 🐛 Debugging
+
+### Log Locations
+
+```bash
+# WordPress debug log
+tail -f wp-content/debug.log
+
+# Filter specific components
+grep "BookingSession" wp-content/debug.log
+grep "TBO" wp-content/debug.log
+grep "MyEndpoint" wp-content/debug.log
+```
+
+**Enable logging in `wp-config.php`:**
+```php
+define('WP_DEBUG', true);
+define('WP_DEBUG_LOG', true);
+define('WP_DEBUG_DISPLAY', false);
+```
+
+**Reference:** [`themes/travel-concierge-me-theme/docs/where_to_see_logs.md`](themes/travel-concierge-me-theme/docs/where_to_see_logs.md)
+
+### Common Issues
+
+| Problem | Check | Solution |
+|---------|-------|----------|
+| Endpoint returns 404 | Registration, permalinks | Flush permalinks, verify `register_routes()` |
+| Nonce validation fails (403) | Nonce freshness, header name | Get new nonce, use `X-WP-Nonce` |
+| Session not found | TTL, UUID format | Check expiration (10 min), verify UUID |
+| TBO API error | Env vars, credentials | Verify `.env`, test with TBO Authenticate |
+
+---
+
+## 📚 Complete Documentation Index
+
+### Quick Start Guides
+- [`endpoints-quick-reference.md`](themes/travel-concierge-me-theme/docs/endpoints-quick-reference.md) — Create endpoint in 5 minutes
+- [`database-quick-reference.md`](themes/travel-concierge-me-theme/docs/database-quick-reference.md) — Create table in 5 minutes
+
+### Architecture Documentation
+- [`class-loading-architecture.md`](themes/travel-concierge-me-theme/docs/class-loading-architecture.md) — Class loading, initialization, hooks
+- [`endpoints-architecture.md`](themes/travel-concierge-me-theme/docs/endpoints-architecture.md) — REST endpoint structure
+- [`database-architecture.md`](themes/travel-concierge-me-theme/docs/database-architecture.md) — Database tables, migrations
+- [`booking-session-architecture.md`](themes/travel-concierge-me-theme/docs/booking-session-architecture.md) — Session system reference
+- [`scss-architecture.md`](themes/travel-concierge-me-theme/docs/scss-architecture.md) — SCSS organization
+
+### Testing & QA
+- **[`TEST_LOG.md`](themes/travel-concierge-me-theme/tests/TEST_LOG.md)** — Test execution log (ALWAYS update) ⭐
+- **[`endpoint-testing-guide.md`](themes/travel-concierge-me-theme/docs/endpoint-testing-guide.md)** — General endpoint testing ⭐
+- **[`tbo-flow-testing-guide.md`](themes/travel-concierge-me-theme/docs/tbo-flow-testing-guide.md)** — TBO complete flow testing ⭐
+- [`tests/integration/README.md`](themes/travel-concierge-me-theme/tests/integration/README.md) — Integration tests guide
+- [`tests/instances/README.md`](themes/travel-concierge-me-theme/tests/instances/README.md) — Test output organization
+- [`qa-docs/`](themes/travel-concierge-me-theme/docs/qa-docs/) — QA test cases and reports
+
+### Code Guidelines
+- [`code-documentation-guidelines.md`](themes/travel-concierge-me-theme/docs/code-documentation-guidelines.md) — DocBlock standards
+- [`html-template-guidelines.md`](themes/travel-concierge-me-theme/docs/html-template-guidelines.md) — Template best practices
+- [`bem-conventions.md`](themes/travel-concierge-me-theme/docs/bem-conventions.md) — BEM methodology
+- [`bem-naming.md`](themes/travel-concierge-me-theme/docs/bem-naming.md) — BEM naming guide
+
+### TBO API Specifications
+- [`tbo-api/tbo-search-api.md`](themes/travel-concierge-me-theme/docs/tbo-api/tbo-search-api.md) — Search endpoint spec
+- [`tbo-api/tbo-prebook-api.md`](themes/travel-concierge-me-theme/docs/tbo-api/tbo-prebook-api.md) — PreBook endpoint spec
+- [`tbo-api/tbo-book-api.md`](themes/travel-concierge-me-theme/docs/tbo-api/tbo-book-api.md) — Book endpoint spec
+- [`tbo-api/tbo-bookingdetail-api.md`](themes/travel-concierge-me-theme/docs/tbo-api/tbo-bookingdetail-api.md) — BookingDetail spec
+- [`tbo-api/tbo-cancel-api.md`](themes/travel-concierge-me-theme/docs/tbo-api/tbo-cancel-api.md) — Cancel endpoint spec
+
+---
+
+## ❓ Frequently Asked Questions
+
+**Q: Should I run tests?**  
+A: Yes, when modifying critical functionality or when the repo includes tests.
+
+**Q: Can I change the architecture?**  
+A: No, not without discussion. Propose PRs and justify reasons for architectural changes.
+
+**Q: Where do I add new PHP logic?**  
+A: In `classes/` following Base/Singleton pattern. Register hooks in `register_actions()`.
+
+**Q: How do I test endpoints?**  
+A: Follow [`endpoint-testing-guide.md`](themes/travel-concierge-me-theme/docs/endpoint-testing-guide.md) for general endpoints or [`tbo-flow-testing-guide.md`](themes/travel-concierge-me-theme/docs/tbo-flow-testing-guide.md) for TBO booking flow.
+
+---
+
+## ✅ Before Submitting Changes
+
+**Checklist:**
+- [ ] Code follows WordPress Coding Standards
+- [ ] No credentials exposed in code
+- [ ] Composer autoload regenerated (`composer dump-autoload`)
+- [ ] Assets built for production (`npm run build`)
+- [ ] Endpoints tested (if applicable)
+- [ ] Logs checked for errors
+- [ ] Documentation updated (if new feature)
+- [ ] Commits are small and descriptive
+
+**After major changes, provide:**
+- Clear steps to test locally
+- Docker/Vite/Composer commands if needed
+- Expected behavior vs actual behavior
+
+---
+
+## 🔄 Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 2.0.0 | 2025-12-27 | Merged builder and theme instructions, added testing guides |
+| 1.0.0 | 2025-12-09 | Initial builder instructions |
+
+---
+
+**Questions or issues?** Check documentation index above or review error logs in `wp-content/debug.log`.
