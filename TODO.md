@@ -74,9 +74,79 @@
 
 ---
 
+### ⚡ Phase 3.1: CanonicalCache Critical Fixes (**Feb 10, 2026**)
+**Objetivo:** Corregir 4 issues críticos identificados en audit sin romper TBO certification feedbacks
+
+**Código protegido (NO TOCAR - TBO Feedbacks #10-#21):**
+- ❌ Constantes TBO: `MAX_HOTEL_CODES_PER_REQUEST`, `BOOK_TIMEOUT_SECONDS`, `NAME_MIN/MAX_LENGTH`, `RESPONSE_TIME_*`
+- ❌ Métodos de validación: `normalize_tbo_name()`, `validate_tbo_name()`, `compare_cancellation_policies()`, `calculate_response_time()`
+- ❌ Timeout recovery logic: `book()` líneas 199-240, `cancel()` líneas 317-389
+- ❌ SmartCache pattern TBO: `fetch_hotel_details()` líneas 1038-1150
+- ❌ BookingDetail extended signature: `get_booking_detail()` con BookingReferenceId support
+
+**Fixes SEGUROS implementados:**
+
+1. **✅ Fix #1: Data Validation** - Validar `$canonical_hotel` antes de cachear
+   - Previene cache poisoning (caches vacíos/null por 7 días)
+   - Valida campos mínimos: `hotelCode`, `hotelName`
+   - Log warning cuando data es inválida
+
+2. **✅ Fix #2: Schema Versioning** - Versión en cache keys
+   - Cache key: `canonical_hotel_{provider}_{code}` → `canonical_hotel_v1_{provider}_{code}`
+   - Previene issues en deployment/rollback cuando estructura cambia
+   - Constante `CANONICAL_CACHE_VERSION = 1`
+
+3. **✅ Fix #3: DELETE with LIMIT** - Protección contra timeout en clear_cache()
+   - Query: `DELETE ... LIMIT 10000` (vs DELETE sin límite)
+   - Previene timeout en databases grandes
+   - Ejecuta múltiples pasadas si necesario
+
+**Archivos modificados:**
+- `classes/Providers/Traits/CanonicalCache.php`
+
+**Impacto TBO:** ✅ **CERO** - Fixes no tocan lógica de negocio TBO, solo capa de cache interna
+
+---
+
 ## 🚀 SIGUIENTES PHASES
 
 ### ⏳ Phase 4: Parallel Provider Execution
+**Objetivo:** Reducir 3,660ms → <2,000ms ejecutando TBO + Hotelbeds en paralelo
+
+**Problema actual:**
+- Búsqueda **secuencial**: TBO (1.2s) → espera → Hotelbeds (1.8s) = 3.0s total
+- Con overhead: ~3,660ms observado
+- Desperdicia tiempo esperando respuestas API
+
+**Solución propuesta:**
+- **Ejecución paralela** usando WordPress async requests o PHP forks
+- TBO y Hotelbeds ejecutan **simultáneamente**
+- Tiempo total = `max(TBO_time, Hotelbeds_time)` vs suma actual
+
+**Tareas:**
+- [ ] Investigar opciones: WordPress HTTP API async, ReactPHP, Guzzle Promises
+- [ ] Diseñar `ParallelProviderExecutor` class
+- [ ] Modificar `UnifiedHotelEndpoint` para ejecutar providers en paralelo
+- [ ] Implementar timeout handling (fail gracefully si 1 provider falla)
+- [ ] Testing con ambos providers
+- [ ] Medir performance (target: <2,000ms)
+
+**Performance esperado:**
+```
+ANTES (secuencial):
+TBO: 1,200ms → espera → Hotelbeds: 1,800ms = 3,000ms + overhead
+Total: ~3,660ms
+
+DESPUÉS (paralelo):
+TBO: 1,200ms ⎤
+                ⎬ → max(1,200, 1,800) = 1,800ms + overhead
+Hotelbeds: 1,800ms ⎦
+Total esperado: ~2,000ms (45% reducción)
+```
+
+---
+
+### ⏳ Phase 4.1: Additional Performance Optimizations
 
 #### 4. Lazy loading frontend
 **Objetivo:** Mejorar UX percibida mostrando resultados progresivamente
@@ -96,7 +166,7 @@
 
 ---
 
-#### 5. Pre-caching popular destinations
+### ⏳ Phase 4.2: Pre-Caching Popular Destinations
 **Objetivo:** Calentar cache proactivamente para destinos frecuentes
 
 **Tareas:**
