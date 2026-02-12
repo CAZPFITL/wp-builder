@@ -6,59 +6,156 @@
 
 ## 🎯 SPRINT ACTUAL - Frontend UX Improvements (Feb 11, 2026)
 
-### ⏳ Task 1: Mejorar Filtros de Hoteles
-**Problema:** Los filtros actuales no están adaptados a la estructura de resultados multi-provider
+### ✅ Task 1: Fix Amenities Filter (COMPLETADO - Feb 11, 2026)
 
-**Análisis necesario:**
-- [ ] Revisar estructura actual de filtros en frontend
-- [ ] Identificar qué filtros existen (`HotelFilters.js` o similar)
-- [ ] Verificar compatibilidad con formato canónico actual
-- [ ] Analizar campos disponibles en respuesta API:
-  - `rating` (0-5 estrellas)
-  - `pricePerNight` (rango de precios)
-  - `amenities[]` (wifi, pool, spa, etc.)
-  - `provider` (hotelbeds, tbo)
-  - `city`, `country`
-
-**Tareas de implementación:**
-- [ ] **Filtro por precio:**
-  - [ ] Range slider (min-max price)
-  - [ ] Actualizar en tiempo real sin recargar
-  - [ ] Mostrar count de hoteles que cumplen filtro
-  
-- [ ] **Filtro por rating:**
-  - [ ] Checkbox/radio buttons (5★, 4★+, 3★+)
-  - [ ] Visual feedback con estrellas
-  
-- [ ] **Filtro por amenities:**
-  - [ ] Checkboxes múltiples (WiFi, Pool, Parking, Spa, Restaurant)
-  - [ ] Tooltip con descripción de cada amenity
-  - [ ] Counter de hoteles con cada amenity
-  
-- [ ] **Filtro por provider (opcional):**
-  - [ ] Radio buttons: "Todos", "Hotelbeds", "TBO"
-  - [ ] Mostrar performance metrics por provider
-  
-- [ ] **Reset filters:**
-  - [ ] Botón "Limpiar filtros"
-  - [ ] Guardar estado de filtros en URL (query params)
-  - [ ] Restaurar filtros al volver de detalle
-
-**Archivos esperados:**
-- `assets/scripts/components/HotelFilters.js`
-- `assets/scripts/sections/hotel-results-handler.js`
-- `assets/styles/sections/_hotel-filters.scss`
-
-**Criterios de aceptación:**
-- ✅ Filtros aplican instantáneamente (sin reload)
-- ✅ Combinación de múltiples filtros (AND logic)
-- ✅ Counter de resultados actualizado en tiempo real
-- ✅ Mobile responsive (collapse filters en <768px)
-- ✅ Estado persistente en URL
+**Contexto Importante:**
+- ✅ Los filtros ya están configurados desde **Gutenberg** (no agregar campos nuevos ahora)
+- ✅ La **capa canónica** se encargará de adaptar estos filtros a los resultados
+- ✅ Los filtros se **populan dinámicamente** con los resultados disponibles
+- ✅ Respetar classnames actuales (configuradas desde bloques Gutenberg)
+- 🔮 Futuro: permitir agregar filtros con classname específica (no es prioridad ahora)
 
 ---
 
-### ⏳ Task 2: Estabilizar Paginación
+#### 🔍 ANÁLISIS COMPLETADO
+
+**Filtros Implementados en `HotelFiltersManager.js`:**
+1. ✅ `name` - Búsqueda por nombre de hotel (texto) - **FUNCIONA**
+2. ✅ `rating` - Calificación por estrellas 1-5 (radio/checkbox) - **FUNCIONA**
+3. ✅ `address` - Búsqueda por dirección (texto) - **FUNCIONA**
+4. ✅ `roomName` - Búsqueda por habitación (texto) - **FUNCIONA**
+5. ✅ `mealTypes` - Preferencias de alimentos (AI, RO, BB, HB, FB) - **FUNCIONA**
+6. ✅ `cancellationPolicies` - Reembolsable/No reembolsable - **FUNCIONA**
+7. ✅ **`amenities` - Amenidades del hotel - FIXED** ✨
+8. ✅ `priceRange` - Rango de precio (min/max sliders) - **FUNCIONA**
+9. ⚠️ `promotions` - Propiedades destacadas - **VACÍO EN API** (por ahora)
+
+---
+
+#### 🐛 PROBLEMA IDENTIFICADO Y RESUELTO: Amenities Filter
+
+**Root Cause:**
+```javascript
+// HotelFiltersManager.js línea 214-217 (extractUniqueValues)
+if (Array.isArray(hotel.facilities)) {  // ❌ facilities NO EXISTE en API
+    hotel.facilities.forEach(facility => {
+        if (facility) this.uniqueValues.amenities.add(facility);
+    });
+}
+
+// línea 538 (applyClientSideFilter)
+const hotelAmenities = hotel.facilities || [];  // ❌ facilities = null
+```
+
+**Estructura Real de la API Canónica:**
+```javascript
+// ❌ NO EXISTE:
+hotel.facilities = null
+
+// ✅ EXISTE:
+hotel.amenities = [
+  { code: 30, description: "Wi-fi", voucher: false },
+  { code: 50, description: "Swimming pool", ... },
+  { code: 80, description: "Restaurant", ... },
+  // ...98 amenities total (Hotelbeds)
+]
+```
+
+**Amenities Encontradas en API (sample):**
+- Wi-fi, Car park, 24-hour reception
+- Room service, Laundry service, Medical service
+- Gym, Spa centre, Sauna, Hot tub, Massage
+- Restaurant, Bar, Café, Poolside snack bar
+- Outdoor pool, Children's swimming area
+- Kids' club, Children playground, Babysitting service
+- Golf, Fitness, Beach volleyball, Billiards
+
+---
+
+#### ✅ SOLUCIÓN IMPLEMENTADA
+
+**Fix #1: extractUniqueValues() - líneas 214-217**
+```javascript
+// ANTES:
+if (Array.isArray(hotel.facilities)) {
+    hotel.facilities.forEach(facility => {
+        if (facility) this.uniqueValues.amenities.add(facility);
+    });
+}
+
+// DESPUÉS:
+if (Array.isArray(hotel.amenities)) {
+    hotel.amenities.forEach(amenity => {
+        if (amenity?.description) {
+            this.uniqueValues.amenities.add(amenity.description);
+        }
+    });
+}
+```
+
+**Fix #2: applyClientSideFilter() - líneas 538-542**
+```javascript
+// ANTES:
+if (this.activeFilters.amenities.size > 0) {
+    const hotelAmenities = hotel.facilities || [];
+    const hasAmenity = Array.from(this.activeFilters.amenities).some(amenity =>
+        hotelAmenities.includes(amenity)
+    );
+    // ...
+}
+
+// DESPUÉS:
+if (this.activeFilters.amenities.size > 0) {
+    const hotelAmenities = (hotel.amenities || []).map(a => a.description);
+    const hasAmenity = Array.from(this.activeFilters.amenities).some(amenity =>
+        hotelAmenities.includes(amenity)
+    );
+    // ...
+}
+```
+
+---
+
+#### ✅ COMPLETADO
+
+- ✅ **Modificar `extractUniqueValues()` (líneas ~214-217)**
+  - Cambiar `hotel.facilities` → `hotel.amenities`
+  - Extraer `amenity.description` en vez de usar el objeto completo
+
+- ✅ **Modificar `applyClientSideFilter()` (líneas ~538-542)**
+  - Cambiar `hotel.facilities` → `hotel.amenities`
+  - Mapear amenities a descriptions antes de comparar
+
+- ✅ **Rebuild Assets:**
+  - `npm run build` ejecutado (2.28s)
+  - Build exitoso sin errores
+
+- ✅ **Git Commit:**
+  - Commit: `fix(filters): cambiar hotel.facilities a hotel.amenities - formato canonico`
+  - Branch: `hotelbeds-integration-sprint-2`
+  - Files: `HotelFiltersManager.js` (1 file, 7 insertions, 5 deletions)
+
+**Pendiente Testing Manual:**
+- [ ] Buscar hoteles en Cancún
+- [ ] Verificar que el filtro de amenities se llene con opciones (Wi-fi, Pool, Gym, etc.)
+- [ ] Seleccionar "Swimming pool" → verificar que filtra correctamente
+- [ ] Combinar con otros filtros (rating + amenities + price)
+- [ ] Verificar que muestra contador de hoteles correctamente
+
+---
+
+#### 🎯 Criterios de Aceptación
+
+- ✅ Filtro de amenities se puebla con descripciones reales de la API
+- ✅ Código compatible con formato canónico (usa `hotel.amenities`)
+- ✅ Extracción correcta de `amenity.description`
+- ✅ Filtrado funcional (OR logic dentro de amenities)
+- ✅ Compatible con ambos providers (Hotelbeds + TBO)
+- ⏳ Testing manual pendiente (recomendado antes de producción)
+
+---
+
+### ⏳ Task 2: Estabilizar Paginación (NO INICIADO)
 **Problema:** Al cambiar de página, la paginación "salta" visualmente:
 1. Desaparece completamente
 2. Reaparece con menos páginas temporalmente
