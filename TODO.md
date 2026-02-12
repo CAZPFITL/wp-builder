@@ -1,347 +1,240 @@
 # TODO - Travel Concierge Me
 
-## 🚀 Performance Optimization Sprint - PHASES 1-3 ✅ COMPLETADO
-
-### ✅ Phase 1: Hotelbeds Batch Content API con SmartCache (**Feb 11, 2026**)
-**Objetivo:** Reducir N+1 problem (1 Booking + 10 Content individual → 1 Booking + 1 Content batch)
-
-**Implementación:**
-- [x] Crear método `get_hotels_content_batch()` en HotelbedsApiClient.php
-- [x] Modificar `transform_hotelbeds_to_canonical()` para usar batch
-- [x] Implementar Smart Cache: individual cache (30d) + batch fetch missing items
-
-**Resultados:**
-- **API calls:** 11 → 2 (82% reducción)
-- **First search:** ~10.8s | **Cached search:** ~3.9s (100% Content cache hit)
-- **Batch efficiency:** 67 hotels en 1 API call vs 67 individuales
-
-**Archivos:** HotelbedsApiClient.php (líneas 289-366), HotelbedsHotelProvider.php
+> **📝 Nota:** Trabajo completado de Phases 1-4 (Performance Optimization Sprint) movido a [TODO-OLD.md](TODO-OLD.md)
 
 ---
 
-### ✅ Phase 2: TBO SmartCache Pattern (**Feb 11, 2026**)
-**Objetivo:** Aplicar mismo patrón SmartCache a TBO HotelDetails
+## 🎯 SPRINT ACTUAL - Frontend UX Improvements (Feb 11, 2026)
 
-**Hallazgo:** ✅ **YA IMPLEMENTADO** - TBO ya tenía SmartCache desde antes
+### ⏳ Task 1: Mejorar Filtros de Hoteles
+**Problema:** Los filtros actuales no están adaptados a la estructura de resultados multi-provider
 
-**Código actual:**
-- `fetch_hotel_details()` en TboHotelProvider.php (líneas 1038-1150)
-- SmartCache: individual cache check → batch fetch missing (max 30/request) → store indial
-- TTL: 24h, Logs: "All 31 hotels served from cache (9.60ms)"
+**Análisis necesario:**
+- [ ] Revisar estructura actual de filtros en frontend
+- [ ] Identificar qué filtros existen (`HotelFilters.js` o similar)
+- [ ] Verificar compatibilidad con formato canónico actual
+- [ ] Analizar campos disponibles en respuesta API:
+  - `rating` (0-5 estrellas)
+  - `pricePerNight` (rango de precios)
+  - `amenities[]` (wifi, pool, spa, etc.)
+  - `provider` (hotelbeds, tbo)
+  - `city`, `country`
 
-**Resultado:** TBO batch ya optimizado, no requiere cambios
+**Tareas de implementación:**
+- [ ] **Filtro por precio:**
+  - [ ] Range slider (min-max price)
+  - [ ] Actualizar en tiempo real sin recargar
+  - [ ] Mostrar count de hoteles que cumplen filtro
+  
+- [ ] **Filtro por rating:**
+  - [ ] Checkbox/radio buttons (5★, 4★+, 3★+)
+  - [ ] Visual feedback con estrellas
+  
+- [ ] **Filtro por amenities:**
+  - [ ] Checkboxes múltiples (WiFi, Pool, Parking, Spa, Restaurant)
+  - [ ] Tooltip con descripción de cada amenity
+  - [ ] Counter de hoteles con cada amenity
+  
+- [ ] **Filtro por provider (opcional):**
+  - [ ] Radio buttons: "Todos", "Hotelbeds", "TBO"
+  - [ ] Mostrar performance metrics por provider
+  
+- [ ] **Reset filters:**
+  - [ ] Botón "Limpiar filtros"
+  - [ ] Guardar estado de filtros en URL (query params)
+  - [ ] Restaurar filtros al volver de detalle
 
----
+**Archivos esperados:**
+- `assets/scripts/components/HotelFilters.js`
+- `assets/scripts/sections/hotel-results-handler.js`
+- `assets/styles/sections/_hotel-filters.scss`
 
-### ✅ Phase 3: L2 Canonical Cache (**Feb 11, 2026**)
-**Objetivo:** Cachear formato canónico transformado para evitar re-transformación
-
-**Implementación:**
-- [x] Creado `CanonicalCache.php` trait (187 líneas, 7d TTL)
-- [x] Integrado en HotelbedsHotelProvider + TboHotelProvider (`use CanonicalCache`)
-- [x] Modificado transforms: L2 check → transform si miss → L2 store
-
-**Cache keys:** `canonical_hotel_{provider}_{hotel_code}` (7 días TTL)
-
-**Resultados medidos (Cancún: 67 Hotelbeds + 31 TBO = 98 hotels):**
-
-| Métrica | Sin L2 | Con L2 Cache | Mejora |
-|---------|--------|--------------|--------|
-| **Primera búsqueda (cold - debe poblar L2)** | ~24,233ms | ~24,233ms | 0% (igual) |
-| **Segunda búsqueda (L1+L2 warm)** | N/A | **~3,660ms** | **84.9% ↓** vs cold |
-| **Content API (Hotelbeds)** | 5,469ms batch | 0ms (100% cached) | L1 SmartCache |
-| **Details API (TBO)** | 11,749ms batch | 9.6ms (100% cached) | L1 SmartCache |
-| **Transformación** | ~6,000ms (estimado) | **0ms** | **L2 evita transform** |
-
-**Logs confirmados:**
-```
-[L2-Cache] ⚡ HIT: hotelbeds/370161 ... (67 hotels)
-[L2-Cache] ⚡ HIT: tbo/1061037 ... (31 hotels)
-[HotelbedsContentBatch] ✨ All 67 hotels served from cache
-[TboDetailsBatch] ✨ All 31 hotels served from cache (9.60ms)
-[TCM] ✅ UnifiedHotelEndpoint completed: 10 total hotels from 2 providers (3660.21ms)
-```
-
-**Conclusión:** 
-- ✅ L2 canonical cache **100% efectivo** (98/98 hotels hit)
-- ✅ Búsquedas subsiguientes **~7x más rápidas** (24s → 3.6s)
-- ✅ Transforma datos provider → formato canónico **solo una vez**, reutiliza 7 días
-
-**Archivos:** 
-- `classes/Providers/Traits/CanonicalCache.php` (nuevo)
-- `classes/Providers/Hotelbeds/HotelbedsHotelProvider.php` (integrado)
-- `classes/Providers/Tbo/TboHotelProvider.php` (integrado)
-
----
-
-### ⚡ Phase 3.1: CanonicalCache Critical Fixes (**Feb 10, 2026**)
-**Objetivo:** Corregir 4 issues críticos identificados en audit sin romper TBO certification feedbacks
-
-**Código protegido (NO TOCAR - TBO Feedbacks #10-#21):**
-- ❌ Constantes TBO: `MAX_HOTEL_CODES_PER_REQUEST`, `BOOK_TIMEOUT_SECONDS`, `NAME_MIN/MAX_LENGTH`, `RESPONSE_TIME_*`
-- ❌ Métodos de validación: `normalize_tbo_name()`, `validate_tbo_name()`, `compare_cancellation_policies()`, `calculate_response_time()`
-- ❌ Timeout recovery logic: `book()` líneas 199-240, `cancel()` líneas 317-389
-- ❌ SmartCache pattern TBO: `fetch_hotel_details()` líneas 1038-1150
-- ❌ BookingDetail extended signature: `get_booking_detail()` con BookingReferenceId support
-
-**Fixes SEGUROS implementados:**
-
-1. **✅ Fix #1: Data Validation** - Validar `$canonical_hotel` antes de cachear
-   - Previene cache poisoning (caches vacíos/null por 7 días)
-   - Valida campos mínimos: `hotelCode`, `hotelName`
-   - Log warning cuando data es inválida
-
-2. **✅ Fix #2: Schema Versioning** - Versión en cache keys
-   - Cache key: `canonical_hotel_{provider}_{code}` → `canonical_hotel_v1_{provider}_{code}`
-   - Previene issues en deployment/rollback cuando estructura cambia
-   - Constante `CANONICAL_CACHE_VERSION = 1`
-
-3. **✅ Fix #3: DELETE with LIMIT** - Protección contra timeout en clear_cache()
-   - Query: `DELETE ... LIMIT 10000` (vs DELETE sin límite)
-   - Previene timeout en databases grandes
-   - Ejecuta múltiples pasadas si necesario
-
-**Archivos modificados:**
-- `classes/Providers/Traits/CanonicalCache.php`
-
-**Impacto TBO:** ✅ **CERO** - Fixes no tocan lógica de negocio TBO, solo capa de cache interna
+**Criterios de aceptación:**
+- ✅ Filtros aplican instantáneamente (sin reload)
+- ✅ Combinación de múltiples filtros (AND logic)
+- ✅ Counter de resultados actualizado en tiempo real
+- ✅ Mobile responsive (collapse filters en <768px)
+- ✅ Estado persistente en URL
 
 ---
 
-### ⚡ Phase 4: Parallel Provider Execution (**Feb 11, 2026**) ✅
-**Objetivo:** Reducir 3,660ms → <2,000ms ejecutando TBO + Hotelbeds en paralelo
+### ⏳ Task 2: Estabilizar Paginación
+**Problema:** Al cambiar de página, la paginación "salta" visualmente:
+1. Desaparece completamente
+2. Reaparece con menos páginas temporalmente
+3. Finalmente muestra el número correcto
 
-**Implementación:**
-- [x] Instalado Guzzle 7.10.0 + Guzzle Promises 2.3.0
-- [x] Modificado `UnifiedHotelEndpoint->handle_hotels_search()` para detectar múltiples providers
-- [x] Implementado `execute_providers_parallel()` usando Guzzle async HTTP loopback requests
-- [x] Implementado `execute_single_provider()` para sub-requests (force_provider param)
-- [x] Graceful degradation: Single provider usa ejecución secuencial directa (sin overhead)
-- [x] Docker fix: Detecta puerto externo (5050) y usa puerto interno (80) para loopback
+**Debugging necesario:**
+- [ ] Identificar archivo JS de paginación
+- [ ] Reproducir issue en dev environment
+- [ ] Detectar cuándo se dispara re-render múltiple
+- [ ] Verificar si es problema de:
+  - Múltiples llamadas API
+  - State management inconsistente
+  - DOM manipulation timing
+  - Filtros aplicándose antes de paginación
 
-**Solución técnica:**
-```php
-// Multiple providers: Async parallel execution
-if (count($this->providers) > 1) {
-    $provider_results = $this->execute_providers_parallel($canonical_request, $payload);
-    // Uses Guzzle Promises to make concurrent loopback HTTP requests
-    // Each request includes force_provider param to execute single provider
+**Root causes probables:**
+
+**Hipótesis #1: Race condition en filtros + paginación**
+```javascript
+// MAL: Filtros y paginación actualizan count simultáneamente
+filterChange() {
+  this.updateHotels(); // Trigger 1
+  this.updatePagination(); // Usa count desactualizado
 }
 
-// Single provider: Direct execution (no HTTP overhead)
-else {
-    $provider_results = $this->execute_providers_sequential($canonical_request);
+pageChange() {
+  this.updateHotels(); // Trigger 2
+  this.updatePagination(); // Doble render
 }
 ```
 
-**Resultados medidos (3 pruebas con cache warm):**
+**Solución:**
+- [ ] Usar debounce en filtros (300ms)
+- [ ] Single source of truth para hotel count
+- [ ] Actualizar paginación SOLO después de hotels render completo
 
-| Prueba | Tiempo (ms) | Hotels | Execution Mode |
-|--------|-------------|--------|----------------|
-| Test #1 | 2,526.54 | 10 | parallel |
-| Test #2 | 2,637.63 | 10 | parallel |
-| Test #3 | 2,442.92 | 10 | parallel |
-| **Promedio** | **~2,535ms** | 10 | parallel |
-| **Antes** | **~3,660ms** | 10 | sequential |
-| **Mejora** | **-30.7% ⚡** | - | - |
-
-**Performance achieved:** 
-- ✅ Reducción de **1,125ms** (3,660ms → 2,535ms)
-- ✅ **30.7% más rápido** (vs objetivo 45%)
-- ✅ Overhead HTTP loopback: ~100-200ms (acceptable por simplicidad)
-
-**Archivos modificados:**
-- `classes/Endpoints/UnifiedHotelEndpoint.php` (+237 líneas)
-- `composer.json` (Guzzle dependencies)
-
-**Logs confirmados:**
-```
-[TCM-Parallel] Using endpoint: http://localhost:80/wp-json/tcm/v1/hotels-search
-[TCM-Parallel] ⚡ Dispatched async request for: hotelbeds
-[TCM-Parallel] ⚡ Dispatched async request for: tbo
-[TCM-Parallel] ⏱️ All providers completed in 2535.42ms
-[TCM-Parallel] ✅ hotelbeds returned 67 hotels
-[TCM-Parallel] ✅ tbo returned 31 hotels
-[TCM] ✅ UnifiedHotelEndpoint completed: 10 total hotels from 2 providers (2535ms) [parallel]
+**Hipótesis #2: Paginación se recalcula antes de aplicar filtros**
+```javascript
+// MAL: Order of operations
+1. User clicks page 2
+2. Pagination updates (shows all pages for unfiltered results)
+3. Filters apply
+4. Pagination recalculates (now fewer hotels = fewer pages)
+5. Visual jump
 ```
 
-**Limitaciones conocidas:**
-- HTTP loopback overhead (~100-200ms) podría eliminarse con async nativo en providers
-- Requiere suficientes PHP-FPM workers (2+ para evitar bloqueo mutuo)
-- Docker requires internal port detection (external 5050 → internal 80)
+**Solución:**
+- [ ] Aplicar filtros ANTES de renderizar paginación
+- [ ] Usar loading skeleton durante transición
+- [ ] Guardar estado previo y hacer fade transition
 
----
-
-## 🚀 SIGUIENTES PHASES
-
-### ⏳ Phase 4.1: Lazy Loading Frontend
-- [ ] Testing con ambos providers
-- [ ] Medir performance (target: <2,000ms)
-
-**Performance esperado:**
-```
-ANTES (secuencial):
-TBO: 1,200ms → espera → Hotelbeds: 1,800ms = 3,000ms + overhead
-Total: ~3,660ms
-
-DESPUÉS (paralelo):
-TBO: 1,200ms ⎤
-                ⎬ → max(1,200, 1,800) = 1,800ms + overhead
-Hotelbeds: 1,800ms ⎦
-Total esperado: ~2,000ms (45% reducción)
-```
-
----
-
-### ⏳ Phase 4.1: Additional Performance Optimizations
-
-#### 4. Lazy loading frontend
-**Objetivo:** Mejorar UX percibida mostrando resultados progresivamente
-
-**Tareas:**
-- [ ] Crear endpoint `/tcm/v1/hotel-content/{provider}/{code}` (fetch individual hotel content)
-- [ ] Implementar `LazyContentLoader.js` utility con IntersectionObserver
-- [ ] Progressive loading strategy:
-  - [ ] Fase 1: Títulos + precios (fast)
-  - [ ] Fase 2: Imágenes primarias (lazy, visible viewport only)
-  - [ ] Fase 3: Galleries + amenities (on-demand)
-- [ ] Mobile optimization (skip images on slow connections)
-- [ ] Loading skeletons para UX
-- [ ] Error handling graceful (fallback to cached data)
-
-**Beneficio:** Usuario ve resultados básicos en ~600ms (vs ~3,500ms actual full load)
-
----
-
-### ⏳ Phase 4.2: Pre-Caching Popular Destinations
-**Objetivo:** Calentar cache proactivamente para destinos frecuentes
-
-**Tareas:**
-- [ ] Crear `PreCacheManager` class en `classes/Cache/`
-- [ ] Identificar top 10 destinos (analytics o manual seed)
-- [ ] WP-Cron job hourly: `wp_schedule_event('hourly', 'tcm_precache_popular_destinations')`
-- [ ] Configuración por entorno (production only, skip dev/test)
-- [ ] Monitoring de cache hit rates (before/after pre-caching)
-- [ ] Admin dashboard para ver pre-cache status
-- [ ] Throttling para evitar API rate limits
-
-**Configuración `.env`:**
-```
-TCM_PRECACHE_ENABLED=true          # Only in production
-TCM_PRECACHE_DESTINATIONS=CUN,CDG,NYC,LON  # Top destinations
-TCM_PRECACHE_CHECK_IN_OFFSET=7    # Days ahead to cache
-```
-
----
-
-### 📚 DOCUMENTACIÓN
-
-#### 6. Verificación y actualización de documentación
-**Objetivo:** Mantener docs sincronizados con código actual
-
-**Tareas:**
-- [ ] **Escanear codebase:**
-  - [ ] Ignorar: node_modules, vendor, .md, build/
-  - [ ] Buscar: @since, @deprecated, TODO comments
-  - [ ] Identificar arquitectura changes no documentados
+**Tareas de implementación:**
+- [ ] **Identificar código actual:**
+  - [ ] Buscar `pagination` en `assets/scripts/`
+  - [ ] Revisar event handlers de page change
+  - [ ] Mapear flujo de datos (filter → hotels → pagination)
   
-- [ ] **Actualizar PROJECT-CONTEXT.md:**
-  - [ ] Arquitectura de caching (L1 raw + L2 canonical, SmartCache pattern)
-  - [ ] Batch pattern por provider (Hotelbeds Content API, TBO HotelDetails)
-  - [ ] Content API integration details (Hotelbeds endpoints, transformations)
-  - [ ] Performance benchmarks actualizados (current vs target)
+- [ ] **Implementar loading states:**
+  - [ ] Skeleton loader para pagination durante carga
+  - [ ] Disable clicks durante transición
+  - [ ] Smooth opacity transition (evitar "flash")
   
-- [ ] **Actualizar README.md:**
-  - [ ] Command reference actualizado (`run-autoload.sh`, `clear-transients.sh`, etc.)
-  - [ ] Environment variables nuevas (TCM_PRECACHE_*, etc.)
-  - [ ] Performance metrics section
-  - [ ] Troubleshooting común (cache issues, API errors, performance debugging)
+- [ ] **Optimizar re-renders:**
+  - [ ] Calcular totalPages UNA VEZ por cambio
+  - [ ] Evitar múltiples DOM manipulations
+  - [ ] Usar `requestAnimationFrame` para batch updates
   
-- [ ] **Crear docs/caching-architecture.md** (nuevo):
-  - [ ] Diagrama de flujo L1/L2 cache
-  - [ ] SmartCache pattern explanation
-  - [ ] Cache key naming conventions
-  - [ ] TTL strategy por tipo de dato
-  - [ ] Cache invalidation strategies
-  
-- [ ] **Crear docs/performance-optimization.md** (nuevo):
-  - [ ] Batch API patterns
-  - [ ] N+1 problem solutions
-  - [ ] Lazy loading strategies
-  - [ ] Pre-caching best practices
-  - [ ] Profiling tools usage
+- [ ] **Mejorar UX:**
+  - [ ] Scroll to top al cambiar página (smooth scroll)
+  - [ ] Mantener scroll position en filtros (no saltar)
+  - [ ] Indicador visual de página actual más prominente
+  - [ ] Números de página accesibles (keyboard navigation)
+
+**Archivos esperados:**
+- `assets/scripts/components/Pagination.js` (o similar)
+- `assets/scripts/sections/hotel-results-handler.js`
+- `assets/styles/components/_pagination.scss`
+
+**Criterios de aceptación:**
+- ✅ Sin "flash" o desaparición de paginación
+- ✅ Transición suave entre páginas (<100ms perceived lag)
+- ✅ Count de páginas correcto DESDE el primer render
+- ✅ No se ejecutan múltiples API calls por page change
+- ✅ Accessible (keyboard nav, ARIA labels)
+- ✅ Mobile responsive (simplified pagination en mobile)
 
 ---
 
-## ✅ COMPLETED (Previous Work)
+## 📋 Checklist General
 
-### Sprint 1 - Hotelbeds Content API Integration (Feb 10, 2026)
-- ✅ Identificación del problema: Booking API no retorna imágenes
-- ✅ Implementación de Content API individual (`get_hotel_content()`)
-- ✅ Transformación de imágenes con base URL (`IMAGE_BASE_URL` constant)
-- ✅ Transformación de facilities a amenities canónicos
-- ✅ Cache individual 30 días por hotel
-- ✅ TextNormalizer enhanced para texto concatenado
+### Antes de empezar
+- [ ] Reproducir ambos issues en dev environment
+- [ ] Tomar screenshots/video del comportamiento actual
+- [ ] Identificar archivos JS/SCSS involucrados
+- [ ] Revisar formato de datos API response (`/tcm/v1/hotels-search`)
+- [ ] Verificar browser console para errores JS
 
-**Resultado:** Hotelbeds retorna 94 imágenes, descripción 1982 chars, 98 amenities (vs null antes)
+### Durante desarrollo
+- [ ] Commits frecuentes con mensajes descriptivos
+- [ ] Testing en Chrome, Firefox, Safari
+- [ ] Testing en mobile (responsive breakpoints)
+- [ ] Logging para debugging (usar `console.group()`)
+- [ ] Performance profiling (Chrome DevTools)
 
----
-
-## 📊 Performance Metrics
-
-### Current State (Feb 11, 2026)
-
-| Provider | First Search | Cached Search | API Calls | Status |
-|----------|--------------|---------------|-----------|--------|
-| **TBO** | ~1,750ms | ~500ms | 6 (1 search + 5 details batches) | ⚠️ Batch cache suboptimal |
-| **Hotelbeds** | ~10,800ms | ~3,900ms | 2 (1 search + 1 content batch) | ✅ Batch implemented, SmartCache active |
-
-### Target State (After Phase 2-3 optimization)
-
-| Provider | First Search | Cached Search | API Calls | Improvement |
-|----------|--------------|---------------|-----------|-------------|
-| **TBO** | ~800ms | ~400ms | 2 (1 search + 1 details SmartCache batch) | ⚡ 54% faster |
-| **Hotelbeds** | ~10,800ms | ~600ms (L2 cache) | 2 (already optimized) | ⚡ 84% faster (cached) |
-
-**Notes:**
-- Hotelbeds first search slow incluye Booking API (~5.2s) + Content batch (~5.6s)
-- Content batch tiempo es constante (~5.6s para 67 hotels), no escala linealmente
-- L2 cache (Phase 3) skip transformat ion → ~600ms cached
-- Production API latencies pueden diferir (TEST API usado para desarrollo)
+### Antes de marcar completo
+- [ ] Code review en GitHub (crear PR)
+- [ ] Testing manual de casos edge:
+  - Filtros sin resultados (mostrar mensaje)
+  - Página inexistente (redirect a última válida)
+  - API error (fallback graceful)
+- [ ] Actualizar comentarios de código
+- [ ] Remover `console.log()` de debugging
+- [ ] Verificar bundle size (no inflar JS innecesariamente)
 
 ---
 
-## 🔧 Development Workflow
+## 🔧 Development Commands
 
-1. **Before starting task:** Mark as ⏳ IN PROGRESS en este archivo
-2. **Commit frequently:** Small, focused commits con descriptive messages
-3. **Test after each change:** Verify functionality + performance benchmarks
-4. **Update metrics:** Document performance impact en esta sección
-5. **Mark complete:** Move to ✅ COMPLETADO with date + results summary
-6. **Update docs:** Sync changes to PROJECT-CONTEXT.md, README.md
-
-**Testing commands:**
 ```bash
-# Clear cache
-docker compose exec wordpress wp transient delete --all --quiet
+# Build frontend assets (watch mode)
+cd themes/travel-concierge-me-theme/assets
+npm run dev
 
-# Test search (Cancún)
+# Build production
+npm run build
+
+# Check for JS errors
+npm run lint
+
+# Test hotel search endpoint
 curl -X POST http://localhost:5050/wp-json/tcm/v1/hotels-search \
   -H "Content-Type: application/json" \
   -d '{"geonameId": 3531673, "checkIn": "2026-03-20", "checkOut": "2026-03-22", "nationality": "MX", "paxRooms": [{"adults": 2}]}'
 
-# Check logs
-docker logs travel-concierge-me-builder-wordpress-1 --tail 100 | grep -E "\[HotelbedsContent|\[TBO"
+# Check response format (filters data)
+curl ... | jq '.data.hotels[] | {hotelName, rating, pricePerNight, amenities, provider}'
+
+# Browser console debugging
+# Add to hotel-results-handler.js:
+console.group('[Filters Debug]');
+console.log('Active filters:', this.activeFilters);
+console.log('Filtered hotels count:', filteredHotels.length);
+console.log('Total pages:', Math.ceil(filteredHotels.length / perPage));
+console.groupEnd();
 ```
 
 ---
 
-## 📝 Notes
+## 📊 Current State (Feb 11, 2026)
 
-- **Priority order** reflects impact/effort ratio
-- **Performance numbers** are for TEST environment (10 hotels/search, 67 total Cancún)
-- **Cache TTLs** can be adjusted based on real usage patterns:
-  - Content API: 30 days (rarely changes)
-  - HotelDetails: 24 hours (prices may fluctuate)
-  - Destinations: 24 hours (availability)
-- **SmartCache pattern** ya implementado en Hotelbeds, reutilizable para otros providers
+**Performance (después de Phase 4):**
+- ✅ Cold search: ~24,233ms (primera vez, popula cache)
+- ✅ Warm search: ~2,535ms (89.5% más rápido)
+- ✅ Execution mode: `parallel` (TBO + Hotelbeds simultáneo)
+- ✅ Cache: L1 (raw) + L2 (canonical) activo
+
+**Pendientes frontend:**
+- ⏳ Filtros adaptados a multi-provider format
+- ⏳ Paginación estable (sin visual jumps)
+- 📋 Lazy loading images (future)
+- 📋 Pre-caching destinos populares (future)
+
+---
+
+## 📝 Notas
+
+- **Prioridad:** Resolver estabilidad de paginación primero (más crítico para UX)
+- **Testing:** Usar dataset Cancún (98 hotels total, 10 por página = 10 páginas)
+- **Browser support:** Chrome 90+, Firefox 88+, Safari 14+ (ES6 modules)
+- **Accessibility:** WCAG 2.1 Level AA mínimo (keyboard nav, ARIA labels)
+
+---
+
+## 🔗 Referencias
+
+- **API Response Format:** Ver `docs/endpoints-architecture.md`
+- **BEM Conventions:** Ver `docs/bem-conventions.md`
+- **Frontend Architecture:** Ver `docs/block-renderers-architecture.md`
+- **Completed Work:** Ver [TODO-OLD.md](TODO-OLD.md) para Phases 1-4
