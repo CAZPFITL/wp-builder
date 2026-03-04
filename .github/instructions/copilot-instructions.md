@@ -1,5 +1,200 @@
 # Travel Concierge Me - AI Agent Instructions
+## 🚨 CRITICAL: GIT OPERATIONS - ABSOLUTE PROHIBITION 🚨
 
+### ❌ NEVER EXECUTE THESE COMMANDS - NO EXCEPTIONS:
+
+```bash
+git commit      # ❌ FORBIDDEN - damages git history
+git add .       # ❌ FORBIDDEN - if followed by commit
+git push        # ❌ FORBIDDEN - NEVER push changes
+git revert      # ❌ FORBIDDEN - NEVER revert commits
+git reset       # ❌ FORBIDDEN - NEVER reset commits
+git merge       # ❌ FORBIDDEN - NEVER merge branches
+git rebase      # ❌ FORBIDDEN - NEVER rebase
+git cherry-pick # ❌ FORBIDDEN - NEVER cherry-pick
+git tag         # ❌ FORBIDDEN - NEVER create tags
+git stash       # ❌ FORBIDDEN - NEVER stash changes
+```
+
+### ✅ ONLY ALLOWED GIT COMMANDS (READ-ONLY):
+
+```bash
+git status      # ✅ Check repository state
+git diff        # ✅ View changes
+git log         # ✅ View commit history
+git show        # ✅ Inspect specific commits
+git branch      # ✅ List branches (no creation)
+git ls-files    # ✅ List tracked files
+```
+
+### 🔥 WHY THIS RULE EXISTS:
+
+**REAL INCIDENT (Feb 15, 2026):**
+- AI agent made unauthorized commits that broke the application
+- Pagination functionality was lost
+- User had to manually restore from git history
+- **Multiple hours of work destroyed**
+
+### 📋 CORRECT WORKFLOW:
+
+1. **Make code changes** as requested
+2. **Show `git diff`** or describe changes to user
+3. **STOP - DO NOT COMMIT**
+4. **Let user review** and commit manually
+5. **User controls** commit messages, timing, and history
+
+### ⚠️ IF USER ASKS TO COMMIT:
+
+**Response:** "I cannot execute git commit commands. This is a hard policy to protect your git history. Please review the changes with `git diff` and commit manually when ready."
+
+**NEVER** assume user wants commits automated, even if they say "save this" or "commit the changes". Always clarify and remind them of manual commit policy.
+
+---
+## 🚨 CRITICAL: PROVIDER CODE — ALWAYS CHECK DOCUMENTATION FIRST 🚨
+
+### 📖 MANDATORY: Read Provider Docs Before ANY Provider Work
+
+**This applies to ALL provider-related tasks — not just errors:**
+
+- ✏️ Modifying provider payloads, fields, or transformations
+- 🆕 Adding new fields or endpoints to a provider
+- 🔧 Refactoring provider code (extractors, adapters, API clients)
+- 🐛 Debugging provider errors or unexpected responses
+- 📊 Changing cache keys, TTLs, or data structures for provider data
+- 🧪 Writing tests that assert provider response shapes
+
+**BEFORE touching any file in `classes/Providers/{ProviderName}/`:**
+
+1. **Open and review** the relevant docs in `docs/{provider}-api/`
+2. **Search for** the specific fields, endpoints, or error codes you'll work with
+3. **Verify** that your changes align with the official API spec
+4. **If the docs don't cover it**, state that explicitly — don't guess
+
+**Why:** Provider APIs have strict contracts. Assumptions about field names, formats, required values, or response structures have caused real production incidents. The documentation is the single source of truth.
+
+---
+
+### ❌ NEVER ASSUME WITHOUT DOCUMENTATION:
+
+**When debugging provider-related errors (Hotelbeds, TBO, etc.):**
+
+1. ❌ **DO NOT** make assumptions about error causes
+2. ❌ **DO NOT** assume data format issues without verification
+3. ❌ **DO NOT** conclude "provider API problem" without evidence
+4. ❌ **DO NOT** write support contact templates before reviewing docs
+5. ❌ **DO NOT** create "root cause analysis" documents prematurely
+
+### ✅ MANDATORY WORKFLOW FOR PROVIDER ERRORS:
+
+**BEFORE analyzing any provider error:**
+
+1. **READ THE OFFICIAL DOCUMENTATION** in `docs/{provider}-api/`
+   - Hotelbeds: `docs/hotelbeds-api/OpenAPI-Hotel-BookingAPI-3.0.yaml`
+   - TBO: `docs/tbo-api/*.md`
+   - Search for error messages, field specifications, constraints
+
+2. **FIND RELEVANT SECTIONS:**
+   ```bash
+   # Search for error message in documentation
+   grep -i "error_message_text" docs/{provider}-api/*
+   
+   # Search for field specs (e.g., rateKey)
+   grep -i "field_name" docs/{provider}-api/*
+   
+   # Look for validation rules, constraints, timeouts
+   grep -i "valid\|invalid\|expir\|timeout" docs/{provider}-api/*
+   ```
+
+3. **COMPARE WITH EXAMPLES:**
+   - Find official examples in documentation
+   - Compare YOUR data vs OFFICIAL examples
+   - Look for: length, format, structure, required fields
+
+**DURING analysis:**
+
+4. **VERIFY EACH ASSUMPTION:**
+   - "Is data length abnormal?" → Check docs for length constraints
+   - "Is format wrong?" → Compare with official format examples
+   - "Is field missing?" → Check required fields in schema
+   - "Is there a timeout?" → Search for TTL/expiration in docs
+
+5. **LOG EVIDENCE, NOT ASSUMPTIONS:**
+   - ✅ "rateKey length: 146 chars. Doc examples: 104-145 chars."
+   - ❌ "rateKey is too short (TEST API data quality issue)"
+
+**AFTER analysis:**
+
+6. **DOCUMENT FINDINGS WITH EVIDENCE:**
+   - Quote relevant sections from official documentation
+   - Show side-by-side comparisons (your data vs doc examples)
+   - List what you verified and what contradicts documentation
+
+7. **ONLY THEN conclude if it's:**
+   - ✅ Our code bug (if our implementation violates documentation)
+   - ✅ Provider API issue (if provider response contradicts their own docs)
+   - ✅ Misunderstanding (if documentation explains the behavior)
+
+### 🔥 WHY THIS RULE EXISTS:
+
+**REAL INCIDENT (Feb 21, 2026):**
+- AI agent assumed Hotelbeds TEST API returns "invalid short rateKeys"
+- Created extensive "root cause analysis" document
+- Modified PROJECT-CONTEXT.md with "known limitations"
+- Prepared support contact template
+- **ALL WITHOUT REVIEWING OFFICIAL DOCUMENTATION FIRST**
+- When docs were reviewed: rateKey lengths were NORMAL per spec
+- **Hours wasted on premature conclusions**
+
+### 📋 CORRECT APPROACH:
+
+```
+User: "PreBook fails with 'rateKey is invalid'"
+
+Agent Actions:
+1. Search docs: grep -i "rateKey" docs/hotelbeds-api/*.yaml
+2. Find schema: "rateKey: Internal key representing room type..."
+3. Find examples: 20200615|20200616|W|1|311|... (104 chars)
+4. Compare: Our key is 146 chars vs examples 104-150 chars
+5. Check for constraints: No length limits documented
+6. Review error codes: Search for "invalid" errors in docs
+7. Test with fresh data: Capture rateType, rateClass flags
+8. THEN analyze: "Length is normal. Need to check rateType field..."
+```
+
+### ⚠️ PROVIDER DOCUMENTATION LOCATIONS:
+
+**Hotelbeds:**
+- Booking API: `docs/hotelbeds-api/OpenAPI-Hotel-BookingAPI-3.0.yaml` (8,332 lines)
+- Content API: `docs/hotelbeds-api/OpenAPI-Hotel-ContentAPI-3.0.yaml` (3,195 lines)
+- README: `docs/hotelbeds-api/README.md` (quick reference)
+
+**TBO:**
+- Search: `docs/tbo-api/tbo-search-api.md`
+- PreBook: `docs/tbo-api/tbo-prebook-api.md`
+- Book: `docs/tbo-api/tbo-book-api.md`
+- Cancel: `docs/tbo-api/tbo-cancel-api.md`
+- BookingDetail: `docs/tbo-api/tbo-bookingdetail-api.md`
+
+### 🛠️ DOCUMENTATION SEARCH COMMANDS:
+
+```bash
+# Find error message in provider docs
+grep -r -i "error_message" docs/{provider}-api/
+
+# Find field specifications
+grep -A 10 -B 2 "fieldName:" docs/provider-api/*.yaml
+
+# Find examples of a field
+grep -C 5 "fieldName.*example\|example.*fieldName" docs/provider-api/
+
+# Search YAML schemas efficiently
+sed -n 'START,END p' docs/hotelbeds-api/OpenAPI-Hotel-BookingAPI-3.0.yaml
+
+# Count lines for context
+wc -l docs/provider-api/*
+```
+
+---
 ## Essential Project Files
 
 **ALWAYS review these files before making significant changes:**
@@ -10,6 +205,64 @@
 - **This file** - Detailed implementation patterns and coding standards
 
 **Workflow:** Check TODO.md for active tasks → Review PROJECT-CONTEXT.md for architecture → Implement following patterns in this file → Update docs after completion.
+
+## � TODO Management Strategy
+
+**Cuando se completa un TODO:**
+
+1. **SIEMPRE mover a TODO-DONE.md** al terminar cada TODO individual — sin excepción:
+   - Cortar la sección completa de `TODO.md` (header `###`, descripción y todo su contenido)
+   - Pegar al FINAL de `TODO-DONE.md` bajo un header `## ✅ Completado: YYYY-MM-DD`
+   - `TODO.md` debe contener SOLO tareas activas/pendientes
+   - **NO esperar a que termine el sprint — mover inmediatamente al completar**
+
+2. **Formato en TODO-DONE.md:**
+   ```markdown
+   ## ✅ Completado: YYYY-MM-DD
+
+   ### TODO-XX — Nombre de la tarea
+   (sección original íntegra)
+   ```
+
+3. **Keep in TODO.md:**
+   - In-progress tasks
+   - Blocked tasks
+   - Pending tasks
+   - Future planned work
+
+## 📄 Documentation File Naming Convention
+
+**MANDATORY:** Every documentation file created in `docs/` MUST include the date and a descriptive name to enable a clear timeline.
+
+### Required Format
+
+```
+YYYY-MM-DD-kebab-case-description.md
+```
+
+**Examples:**
+```
+docs/edge-cases/2026-02-21-sanitize-text-field-corrupts-provider-ratekey.md
+docs/todos/2026-02-10-tbo-certification-feedbacks.md
+docs/2026-03-05-phase-4-parallel-provider-execution.md
+```
+
+### Rules
+
+1. **Date first:** `YYYY-MM-DD` at the start of the filename — enables chronological sorting
+2. **Kebab-case description:** lowercase, words separated by `-`, no spaces or underscores
+3. **No generic names:** ❌ `notes.md`, `debug.md`, `temp.md` — ✅ `2026-02-21-hotelbeds-prebook-debug-notes.md`
+4. **Edge cases folder:** All investigated bugs/unexpected behaviors → `docs/edge-cases/YYYY-MM-DD-name.md`
+5. **Date = creation date** (not resolution date or today if documenting past events)
+
+### When to create documentation
+
+| Scenario | Location | Example name |
+|----------|----------|--------------|
+| Bug investigation / root cause | `docs/edge-cases/` | `2026-02-21-sanitize-corrupts-ratekey.md` |
+| Architecture decision | `docs/` | `2026-03-01-parallel-provider-architecture.md` |
+| Feature implementation notes | `docs/` | `2026-02-10-l2-canonical-cache-implementation.md` |
+| Provider certification | `docs/todos/` | `2026-01-15-tbo-certification-feedbacks.md` |
 
 ## Project Overview
 
@@ -471,12 +724,61 @@ if (entry.type === 'normalizedText') {
 # 5. Provider API /hotels search
 ```
 
+### Provider Error Simulation (Resilience Testing)
+
+**Purpose:** Test graceful degradation without breaking real APIs.
+
+**Environment variable:** `TCM_SIMULATE_PROVIDER_ERRORS`
+
+**Modes:**
+- `none` - Normal operation (default)
+- `random` - 50% chance each provider fails (simulates intermittent issues)
+- `tbo` - TBO always fails (test Hotelbeds solo resilience)
+- `hotelbeds` - Hotelbeds always fails (test TBO solo resilience)
+
+**Usage:**
+```bash
+# Test that Hotelbeds works when TBO fails
+TCM_SIMULATE_PROVIDER_ERRORS=tbo docker compose up -d
+
+# Run search
+curl -X POST http://localhost:5050/wp-json/tcm/v1/hotels-search \
+  -H "Content-Type: application/json" \
+  -d '{"geonameId": 3531673, "checkIn": "2026-03-20", "checkOut": "2026-03-22", "nationality": "MX", "paxRooms": [{"adults": 2}]}'
+
+# Verify in logs
+docker logs wordpress-1 --tail 50 | grep "🎭 Simulating"
+# Expected: "🎭 Simulating tbo error (forced tbo failure)"
+
+# Restore normal operation
+TCM_SIMULATE_PROVIDER_ERRORS=none docker compose up -d
+```
+
+**What to verify:**
+- ✅ Frontend displays results from successful provider
+- ✅ Failed provider error appears in `meta.providerErrors`
+- ✅ Response time < 30s (individual provider timeout prevents blocking)
+- ✅ No AbortError in browser console
+
+**When to use:**
+- Before production deployment
+- After changing provider timeout logic
+- When implementing new providers
+- Testing CI/CD pipeline resilience
+
+**Implementation details:**
+- Simulated errors include 2s delay (realistic processing time)
+- Logs clearly marked with 🎭 emoji for easy identification
+- Response includes `meta.simulated: true` for debugging
+- Does not affect cache or database state
+
 ## Environment Configuration
 
 **Key variables in `.env`:**
 
 ```env
 TCM_ACTIVE_PROVIDERS=hotelbeds          # Comma-separated: tbo,hotelbeds
+TCM_SIMULATE_PROVIDER_ERRORS=none       # none/random/tbo/hotelbeds (testing only)
 HOTELBEDS_API_URL=https://api.test.hotelbeds.com
 HOTELBEDS_API_KEY={key}
 HOTELBEDS_API_SECRET={secret}
@@ -486,32 +788,64 @@ WP_DEBUG=true                            # Required for debug logs
 
 ## Common Mistakes to Avoid
 
+### ⚠️ PROVIDER ERROR ANALYSIS (CRITICAL)
+**RULE #1:** Review provider documentation BEFORE, DURING, and AFTER analyzing errors
+
+1. ❌ **Analyzing provider errors without reading docs:** ALWAYS check `docs/{provider}-api/` first
+2. ❌ **Assuming API problems without evidence:** Compare responses vs official examples
+3. ❌ **Making "root cause" conclusions without doc verification:** Only conclude after doc review
+4. ❌ **Creating support templates before researching:** Review all official specs first
+5. ❌ **Trusting assumptions over documentation:** Official docs are the source of truth
+
 ### Architecture & Data
-1. ❌ **Storing provider codes in database:** Use runtime translation with cache
-2. ❌ **Skipping canonical transformation:** Always transform at provider boundary
-3. ❌ **Direct provider API calls from frontend:** Use endpoints as abstraction
-4. ❌ **Hardcoding country mappings:** Use provider API with fallback only if needed
+6. ❌ **Storing provider codes in database:** Use runtime translation with cache
+7. ❌ **Skipping canonical transformation:** Always transform at provider boundary
+8. ❌ **Direct provider API calls from frontend:** Use endpoints as abstraction
+9. ❌ **Hardcoding country mappings:** Use provider API with fallback only if needed
 
 ### Development Workflow
-5. ❌ **Forgetting to rebuild autoload:** After creating/moving classes, run `composer dump-autoload -o`
-6. ❌ **Testing without clearing cache:** Use `wp transient delete --all` between tests when needed
-7. ❌ **Not checking TODO.md:** Review active tasks before starting work
+10. ❌ **Forgetting to rebuild autoload:** After creating/moving classes, run `composer dump-autoload -o`
+11. ❌ **Testing without clearing cache:** Use `wp transient delete --all` between tests when needed
+12. ❌ **Not checking TODO.md:** Review active tasks before starting work
+
+### Autoload & require_once
+13. ❌ **Adding `require_once` for classes/traits/interfaces inside `classes/`:** Composer's classmap (`"classmap": ["classes/"]`) auto-resolves everything under `classes/`. Manual `require_once` is redundant, creates coupling, and masks missing autoload rebuilds.
+14. ✅ **`require_once` IS needed for:** procedural files (`inc/*.php`, helpers), WordPress core files (`wp-admin/includes/upgrade.php`), and `vendor/autoload.php` itself.
+15. ✅ **After adding/renaming/moving any class file:** Always run `composer dump-autoload -o` to regenerate the classmap.
 
 ### Caching Best Practices (Phase 1-3.1 Lessons)
-8. ❌ **Caching without validation:** ALWAYS validate data before storing (prevent cache poisoning)
-9. ❌ **No schema versioning:** Use versioned cache keys (`v1_`, `v2_`) for structural changes
-10. ❌ **Batch caching entire response:** Cache individual items for granular invalidation
-11. ❌ **DELETE without LIMIT:** Use `LIMIT 10000` in batch DELETE to prevent timeout
-12. ❌ **Modifying TBO certified code:** Never change TBO constants/methods (Feedbacks #10-#21)
-13. ❌ **Skipping L2 cache check:** Check CanonicalCache before transforming data
-14. ❌ **Same TTL for L1 and L2:** L2 should be shorter (7d) than L1 (30d/24h)
+16. ❌ **Caching without validation:** ALWAYS validate data before storing (prevent cache poisoning)
+17. ❌ **No schema versioning:** Use versioned cache keys (`v1_`, `v2_`) for structural changes
+18. ❌ **Batch caching entire response:** Cache individual items for granular invalidation
+19. ❌ **DELETE without LIMIT:** Use `LIMIT 10000` in batch DELETE to prevent timeout
+20. ❌ **Modifying TBO certified code:** Never change TBO constants/methods (Feedbacks #10-#21)
+21. ❌ **Skipping L2 cache check:** Check CanonicalCache before transforming data
+22. ❌ **Same TTL for L1 and L2:** L2 should be shorter (7d) than L1 (30d/24h)
 
 ### Performance Anti-Patterns
-15. ❌ **N+1 API calls:** Use SmartCache pattern (batch fetch missing items)
-16. ❌ **Over-fetching:** Only request needed fields from APIs
-17. ❌ **Ignoring cache hit logs:** Monitor `[L2-Cache] ⚡ HIT` logs for effectiveness
+23. ❌ **N+1 API calls:** Use SmartCache pattern (batch fetch missing items)
+24. ❌ **Over-fetching:** Only request needed fields from APIs
+25. ❌ **Ignoring cache hit logs:** Monitor `[L2-Cache] ⚡ HIT` logs for effectiveness
+
+### Sanitization of Provider Tokens (Feb 21, 2026 incident)
+26. ❌ **`sanitize_text_field()` on rateKey/ResultToken:** Collapses multiple spaces → corrupts token silently
+27. ❌ **Any whitespace-normalizing sanitizer on opaque tokens:** Tokens from providers are NOT user text
+28. ✅ **Use `sanitize_booking_code()` pattern for provider tokens:** `preg_replace('/[\x00-\x1f\x7f]/', '', $token)` — strips control chars only, preserves all printable content including double spaces
+
+**Real incident:** `"NRF OPAQUE  RO"` (double space) → `sanitize_text_field()` → `"NRF OPAQUE RO"` (single space) = 154 chars instead of 155. Entire rateKey invalidated, HTTP 400 on CheckRate.  
+See: `docs/edge-cases/2026-02-21-sanitize-text-field-corrupts-provider-ratekey.md`
 
 ## Documentation Quick Links
+
+**⚠️ Provider API Documentation (MANDATORY FOR ERROR ANALYSIS):**
+- **Hotelbeds Booking API:** `docs/hotelbeds-api/OpenAPI-Hotel-BookingAPI-3.0.yaml` (8,332 lines)
+- **Hotelbeds Content API:** `docs/hotelbeds-api/OpenAPI-Hotel-ContentAPI-3.0.yaml` (3,195 lines)
+- **Hotelbeds README:** `docs/hotelbeds-api/README.md` (quick reference)
+- **TBO Search:** `docs/tbo-api/tbo-search-api.md`
+- **TBO PreBook:** `docs/tbo-api/tbo-prebook-api.md`
+- **TBO Book:** `docs/tbo-api/tbo-book-api.md`
+- **TBO Cancel:** `docs/tbo-api/tbo-cancel-api.md`
+- **TBO BookingDetail:** `docs/tbo-api/tbo-bookingdetail-api.md`
 
 **Project Management:**
 - **Current sprint:** `TODO.md` (tasks, priorities, performance metrics)
@@ -524,6 +858,7 @@ WP_DEBUG=true                            # Required for debug logs
 - **Database tables:** `docs/database-quick-reference.md`
 - **Testing guide:** `docs/endpoint-testing-guide.md`
 - **Hotelbeds status:** `docs/hotelbeds-implementation-analysis.md`
+- **Edge cases / bugs:** `docs/edge-cases/` (see individual files with YYYY-MM-DD prefix)
 
 ## Debug Mode
 
