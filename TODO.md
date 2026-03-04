@@ -1,337 +1,272 @@
-# TODO - Travel Concierge Me
+# TODO — Travel Concierge Me
 
-> **📝 Nota:** Trabajo completado de Phases 1-4 (Performance Optimization Sprint) movido a [TODO-OLD.md](TODO-OLD.md)
-
----
-
-## 🎯 SPRINT ACTUAL - Frontend UX Improvements (Feb 11, 2026)
-
-### ✅ Task 1: Fix Amenities Filter (COMPLETADO - Feb 11, 2026)
-
-**Contexto Importante:**
-- ✅ Los filtros ya están configurados desde **Gutenberg** (no agregar campos nuevos ahora)
-- ✅ La **capa canónica** se encargará de adaptar estos filtros a los resultados
-- ✅ Los filtros se **populan dinámicamente** con los resultados disponibles
-- ✅ Respetar classnames actuales (configuradas desde bloques Gutenberg)
-- 🔮 Futuro: permitir agregar filtros con classname específica (no es prioridad ahora)
+Sprint activo: **Hotelbeds Book Integration**  
+Fecha de creación: 2026-02-21  
+Branch tema: `hotelbeds-integration-sprint-2`
 
 ---
 
-#### 🔍 ANÁLISIS COMPLETADO
+## 🟡 MEDIO — Robustez y mantenibilidad
 
-**Filtros Implementados en `HotelFiltersManager.js`:**
-1. ✅ `name` - Búsqueda por nombre de hotel (texto) - **FUNCIONA**
-2. ✅ `rating` - Calificación por estrellas 1-5 (radio/checkbox) - **FUNCIONA**
-3. ✅ `address` - Búsqueda por dirección (texto) - **FUNCIONA**
-4. ✅ `roomName` - Búsqueda por habitación (texto) - **FUNCIONA**
-5. ✅ `mealTypes` - Preferencias de alimentos (AI, RO, BB, HB, FB) - **FUNCIONA**
-6. ✅ `cancellationPolicies` - Reembolsable/No reembolsable - **FUNCIONA**
-7. ✅ **`amenities` - Amenidades del hotel - FIXED** ✨
-8. ✅ `priceRange` - Rango de precio (min/max sliders) - **FUNCIONA**
-9. ⚠️ `promotions` - Propiedades destacadas - **VACÍO EN API** (por ahora)
+### TODO-1 — Selector de botón "Crear reserva/Reservar" frágil en JS
+**Archivo:** `assets/scripts/modules/bookingButtonHandler.js`  
+**Problema:** El botón se localiza buscando texto que contenga "crear reserva", "voucher" o "emitir". Si el texto cambia en Gutenberg, el listener no se adjunta y el flujo de reserva queda silenciosamente roto. Afecta también al botón "Reservar" de la página de hoteles.  
+**Solución conceptual:** Agregar `data-action="create-booking"` / `data-action="reserve-hotel"` como CSS class o HTML Anchor en el Advanced panel de Gutenberg (visible en capturas), y buscar por ese atributo desde JS en lugar de texto.  
+**Nota:** Pendiente para el final del sprint — hay múltiples botones afectados y requiere coordinación con el editor Gutenberg.
 
----
+### TODO-2 — Base de datos interna de bookings canónicos para enriquecer consultar-reserva
+**Archivos afectados:**
+- `classes/Database/BookingsTable.php` (nuevo)
+- `classes/Database/DatabaseManager.php` (registrar nueva tabla)
+- `classes/Providers/Hotelbeds/HotelbedsHotelProvider.php` (`book()` method)
+- `classes/Providers/Tbo/TboHotelProvider.php` (`book()` method)
+- `classes/Endpoints/TBO/Endpoint.php` (`handle_booking_detail()` method)
 
-#### 🐛 PROBLEMA IDENTIFICADO Y RESUELTO: Amenities Filter
+**Problema:**  
+Hotelbeds Booking Detail API no devuelve `email`/`phone` de huéspedes (solo `name`/`surname`), a diferencia de TBO que sí los incluye en `Guest.Email`/`Guest.PhoneNo`. Esto causa que en la página **consultar-reserva**, las reservas de Hotelbeds muestren huéspedes sin datos de contacto.
 
-**Root Cause:**
-```javascript
-// HotelFiltersManager.js línea 214-217 (extractUniqueValues)
-if (Array.isArray(hotel.facilities)) {  // ❌ facilities NO EXISTE en API
-    hotel.facilities.forEach(facility => {
-        if (facility) this.uniqueValues.amenities.add(facility);
-    });
-}
+**Causa raíz:**  
+Es una limitación del API de Hotelbeds — `ApiHolder` y `paxes` en el booking detail response solo devuelven nombres ([OpenAPI-Hotel-BookingAPI-3.0.yaml L5206-5228](docs/hotelbeds-api/OpenAPI-Hotel-BookingAPI-3.0.yaml#L5206-L5228)). El campo `contactData` (email/phone) solo existe en el **request** de booking (para pago con tarjeta), no en la respuesta.
 
-// línea 538 (applyClientSideFilter)
-const hotelAmenities = hotel.facilities || [];  // ❌ facilities = null
-```
+**Impacto:**  
+- ✅ TBO: Muestra email/phone en consultar-reserva
+- ❌ Hotelbeds: Solo muestra nombres (email/phone = `null`)
+- ⚠️ Inconsistencia en UX multi-provider
 
-**Estructura Real de la API Canónica:**
-```javascript
-// ❌ NO EXISTE:
-hotel.facilities = null
+**Solución conceptual:**  
+1. **Crear tabla `tcm_bookings`** con schema canónico:
+   ```sql
+   CREATE TABLE tcm_bookings (
+     id BIGINT AUTO_INCREMENT PRIMARY KEY,
+     booking_id VARCHAR(50) NOT NULL UNIQUE,
+     confirmation_number VARCHAR(50) NOT NULL,
+     provider VARCHAR(20) NOT NULL,
+     status VARCHAR(20) NOT NULL,
+     guest_details JSON NOT NULL,  -- Array completo con email/phone
+     hotel_data JSON NOT NULL,
+     search_params JSON NOT NULL,
+     rooms JSON NOT NULL,
+     total_amount DECIMAL(10,2),
+     currency VARCHAR(3),
+     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+     INDEX idx_confirmation (confirmation_number),
+     INDEX idx_provider (provider),
+     INDEX idx_status (status)
+   )
+   ```
 
-// ✅ EXISTE:
-hotel.amenities = [
-  { code: 30, description: "Wi-fi", voucher: false },
-  { code: 50, description: "Swimming pool", ... },
-  { code: 80, description: "Restaurant", ... },
-  // ...98 amenities total (Hotelbeds)
-]
-```
+2. **Modificar `book()` en ambos providers** para insertar en DB después de booking exitoso:
+   ```php
+   // Después de transform_hotelbeds_book_to_canonical() / TBO equivalent
+   $this->store_booking_in_database($canonical_response, $session);
+   ```
 
-**Amenities Encontradas en API (sample):**
-- Wi-fi, Car park, 24-hour reception
-- Room service, Laundry service, Medical service
-- Gym, Spa centre, Sauna, Hot tub, Massage
-- Restaurant, Bar, Café, Poolside snack bar
-- Outdoor pool, Children's swimming area
-- Kids' club, Children playground, Babysitting service
-- Golf, Fitness, Beach volleyball, Billiards
+3. **Modificar `handle_booking_detail()`** en TBO/Endpoint.php:
+   - Primero intentar leer de `tcm_bookings` (datos completos)
+   - Si no existe o falla, fallback a provider API (datos limitados)
+   - Merge ambos: usar DB para `guestDetails`, API para status actual
 
----
+**Beneficios adicionales:**
+- ✅ Backup local de todas las reservas (auditoría)
+- ✅ Consultas rápidas sin depender de APIs externas
+- ✅ Base para futuras features (reportes, analytics, notificaciones)
+- ✅ Permite enriquecer datos de cualquier provider con limitaciones
 
-#### ✅ SOLUCIÓN IMPLEMENTADA
+**Testing:**  
+1. Crear booking con Hotelbeds (email/phone enviados en session)
+2. Verificar inserción en `tcm_bookings` con `guestDetails` completo
+3. Consultar reserva en `/consultar-reserva` → debe mostrar email/phone
+4. Verificar que TBO sigue funcionando igual (DB como backup)
 
-**Fix #1: extractUniqueValues() - líneas 214-217**
-```javascript
-// ANTES:
-if (Array.isArray(hotel.facilities)) {
-    hotel.facilities.forEach(facility => {
-        if (facility) this.uniqueValues.amenities.add(facility);
-    });
-}
-
-// DESPUÉS:
-if (Array.isArray(hotel.amenities)) {
-    hotel.amenities.forEach(amenity => {
-        if (amenity?.description) {
-            this.uniqueValues.amenities.add(amenity.description);
-        }
-    });
-}
-```
-
-**Fix #2: applyClientSideFilter() - líneas 538-542**
-```javascript
-// ANTES:
-if (this.activeFilters.amenities.size > 0) {
-    const hotelAmenities = hotel.facilities || [];
-    const hasAmenity = Array.from(this.activeFilters.amenities).some(amenity =>
-        hotelAmenities.includes(amenity)
-    );
-    // ...
-}
-
-// DESPUÉS:
-if (this.activeFilters.amenities.size > 0) {
-    const hotelAmenities = (hotel.amenities || []).map(a => a.description);
-    const hasAmenity = Array.from(this.activeFilters.amenities).some(amenity =>
-        hotelAmenities.includes(amenity)
-    );
-    // ...
-}
-```
+**Dependencias:** Ninguna (puede ejecutarse en paralelo o después de TODO-1)
 
 ---
 
-#### ✅ COMPLETADO
+## 🟢 BAJO — Mantenibilidad técnica (cache)
 
-- ✅ **Modificar `extractUniqueValues()` (líneas ~214-217)**
-  - Cambiar `hotel.facilities` → `hotel.amenities`
-  - Extraer `amenity.description` en vez de usar el objeto completo
+### TODO-3 — Cap booking session payload size
+**Archivos afectados:**
+- `classes/Endpoints/BookingSession/Endpoint.php` (`handle_create_session()`)
+- `classes/Endpoints/TBO/Endpoint.php` (`save_booking_session()`)
 
-- ✅ **Modificar `applyClientSideFilter()` (líneas ~538-542)**
-  - Cambiar `hotel.facilities` → `hotel.amenities`
-  - Mapear amenities a descriptions antes de comparar
+**Problema:** El transient `tcm:session:booking:{uuid}` crece sin límite a lo largo del flujo Search → PreBook → Book. Puede alcanzar 200+ KB. El endpoint de TBO tiene un threshold de advertencia de 1 MB pero no hay un cap activo.
 
-- ✅ **Rebuild Assets:**
-  - `npm run build` ejecutado (2.28s)
-  - Build exitoso sin errores
+**Solución conceptual:**
+1. Identificar qué secciones del payload son imprescindibles por fase vs. acumuladas innecesariamente
+2. En `save_booking_session()`: antes de `set_transient`, serializar y validar tamaño: `if ( strlen( serialize( $session ) ) > 500_000 ) { error_log(...) }`
+3. Evaluar si `tboBooking.priceHistory`, `rooms[].rateConditions` completos son necesarios en sesión o pueden moverse a la DB canónica (ver TODO-2)
+4. Agregar hard cap con `wp_json_encode` size check y fallback a almacenamiento parcial
 
-- ✅ **Git Commit:**
-  - Commit: `fix(filters): cambiar hotel.facilities a hotel.amenities - formato canonico`
-  - Branch: `hotelbeds-integration-sprint-2`
-  - Files: `HotelFiltersManager.js` (1 file, 7 insertions, 5 deletions)
+**Nota:** Revisar TODO-2 antes de implementar — una DB canónica de bookings puede resolver este problema estructuralmente.
 
-**Pendiente Testing Manual:**
-- [ ] Buscar hoteles en Cancún
-- [ ] Verificar que el filtro de amenities se llene con opciones (Wi-fi, Pool, Gym, etc.)
-- [ ] Seleccionar "Swimming pool" → verificar que filtra correctamente
-- [ ] Combinar con otros filtros (rating + amenities + price)
-- [ ] Verificar que muestra contador de hoteles correctamente
+### TODO-4 — Reemplazar md5 en cache key de TBO API cache
+**Archivo afectado:** `classes/Providers/Tbo/Traits/TboApiClient.php`
 
----
+**Problema:** La clave `tcm:api_cache:tbo:{md5(endpoint+payload+method)}` usa un hash opaco. Es imposible identificar desde `wp_options` (o via WP-CLI) qué endpoint o payload corresponde a cada entrada cacheada, dificultando el debugging.
 
-#### 🎯 Criterios de Aceptación
+**Callers actuales con `cache_ttl > 0`:**
+- `HotelCodeList` → cache 1800s
+- `CountryList` → cache 86400s
+- `CountryMap` (o similar) → cache 86400s
 
-- ✅ Filtro de amenities se puebla con descripciones reales de la API
-- ✅ Código compatible con formato canónico (usa `hotel.amenities`)
-- ✅ Extracción correcta de `amenity.description`
-- ✅ Filtrado funcional (OR logic dentro de amenities)
-- ✅ Compatible con ambos providers (Hotelbeds + TBO)
-- ⏳ Testing manual pendiente (recomendado antes de producción)
+**Solución conceptual:**
+1. Para los callers conocidos con TTL > 0, construir claves legibles en lugar de md5:
+   - `tcm:api_cache:tbo:hotel_code_list:{city_code}` (ya existe en `CacheTtl` como `hotel_code_list`)
+   - `tcm:api_cache:tbo:country_list` (ref data, single key)
+2. Mantener `md5` como fallback solo para callers desconocidos / dinámicos
+3. Verificar que ninguna clave supera los 172 chars (límite WordPress)
 
 ---
 
-### ⏳ Task 2: Estabilizar Paginación (NO INICIADO)
-**Problema:** Al cambiar de página, la paginación "salta" visualmente:
-1. Desaparece completamente
-2. Reaparece con menos páginas temporalmente
-3. Finalmente muestra el número correcto
+## � QA / Verificación manual
 
-**Debugging necesario:**
-- [ ] Identificar archivo JS de paginación
-- [ ] Reproducir issue en dev environment
-- [ ] Detectar cuándo se dispara re-render múltiple
-- [ ] Verificar si es problema de:
-  - Múltiples llamadas API
-  - State management inconsistente
-  - DOM manipulation timing
-  - Filtros aplicándose antes de paginación
+### TODO-5 — Auditar que todas las notificaciones de usuario estén en español
+**Archivos a revisar:**
+- `assets/scripts/store/slices/hotelSearchSlice.js` (mensajes de error del thunk `searchHotels`)
+- `assets/scripts/classes/HotelSearchManager.js` (mensajes de consola y toast en `performHotelSearch`)
+- `assets/scripts/modules/notifications.js` (textos hardcoded si los hay)
+- `assets/scripts/modules/hotelCardBooking.js` (`showToast(...)` calls)
+- `assets/scripts/classes/URLSearchParamsManager.js` (`showToast(...)` calls)
+- `assets/scripts/store/api/errorHandlers.js` (mensajes de `normalizeError`)
 
-**Root causes probables:**
+**Qué revisar:**
+1. Buscar todos los `showToast(`, `setError(`, `showNotification(` y `throw new Error(` con texto en inglés
+2. Verificar también mensajes de `logger.error` que lleguen visibles al usuario final
+3. Especial atención a: `'Error searching hotels'`, `'Invalid search payload'`, `'Request timeout - please try again'`, `'No previous search to paginate'`
 
-**Hipótesis #1: Race condition en filtros + paginación**
-```javascript
-// MAL: Filtros y paginación actualizan count simultáneamente
-filterChange() {
-  this.updateHotels(); // Trigger 1
-  this.updatePagination(); // Usa count desactualizado
-}
+**Criterio de aceptación:** Todo string que el usuario final puede ver debe estar en español. Strings de consola/debug pueden quedarse en inglés.
 
-pageChange() {
-  this.updateHotels(); // Trigger 2
-  this.updatePagination(); // Doble render
-}
-```
-
-**Solución:**
-- [ ] Usar debounce en filtros (300ms)
-- [ ] Single source of truth para hotel count
-- [ ] Actualizar paginación SOLO después de hotels render completo
-
-**Hipótesis #2: Paginación se recalcula antes de aplicar filtros**
-```javascript
-// MAL: Order of operations
-1. User clicks page 2
-2. Pagination updates (shows all pages for unfiltered results)
-3. Filters apply
-4. Pagination recalculates (now fewer hotels = fewer pages)
-5. Visual jump
-```
-
-**Solución:**
-- [ ] Aplicar filtros ANTES de renderizar paginación
-- [ ] Usar loading skeleton durante transición
-- [ ] Guardar estado previo y hacer fade transition
-
-**Tareas de implementación:**
-- [ ] **Identificar código actual:**
-  - [ ] Buscar `pagination` en `assets/scripts/`
-  - [ ] Revisar event handlers de page change
-  - [ ] Mapear flujo de datos (filter → hotels → pagination)
-  
-- [ ] **Implementar loading states:**
-  - [ ] Skeleton loader para pagination durante carga
-  - [ ] Disable clicks durante transición
-  - [ ] Smooth opacity transition (evitar "flash")
-  
-- [ ] **Optimizar re-renders:**
-  - [ ] Calcular totalPages UNA VEZ por cambio
-  - [ ] Evitar múltiples DOM manipulations
-  - [ ] Usar `requestAnimationFrame` para batch updates
-  
-- [ ] **Mejorar UX:**
-  - [ ] Scroll to top al cambiar página (smooth scroll)
-  - [ ] Mantener scroll position en filtros (no saltar)
-  - [ ] Indicador visual de página actual más prominente
-  - [ ] Números de página accesibles (keyboard navigation)
-
-**Archivos esperados:**
-- `assets/scripts/components/Pagination.js` (o similar)
-- `assets/scripts/sections/hotel-results-handler.js`
-- `assets/styles/components/_pagination.scss`
-
-**Criterios de aceptación:**
-- ✅ Sin "flash" o desaparición de paginación
-- ✅ Transición suave entre páginas (<100ms perceived lag)
-- ✅ Count de páginas correcto DESDE el primer render
-- ✅ No se ejecutan múltiples API calls por page change
-- ✅ Accessible (keyboard nav, ARIA labels)
-- ✅ Mobile responsive (simplified pagination en mobile)
-
----
-
-## 📋 Checklist General
-
-### Antes de empezar
-- [ ] Reproducir ambos issues en dev environment
-- [ ] Tomar screenshots/video del comportamiento actual
-- [ ] Identificar archivos JS/SCSS involucrados
-- [ ] Revisar formato de datos API response (`/tcm/v1/hotels-search`)
-- [ ] Verificar browser console para errores JS
-
-### Durante desarrollo
-- [ ] Commits frecuentes con mensajes descriptivos
-- [ ] Testing en Chrome, Firefox, Safari
-- [ ] Testing en mobile (responsive breakpoints)
-- [ ] Logging para debugging (usar `console.group()`)
-- [ ] Performance profiling (Chrome DevTools)
-
-### Antes de marcar completo
-- [ ] Code review en GitHub (crear PR)
-- [ ] Testing manual de casos edge:
-  - Filtros sin resultados (mostrar mensaje)
-  - Página inexistente (redirect a última válida)
-  - API error (fallback graceful)
-- [ ] Actualizar comentarios de código
-- [ ] Remover `console.log()` de debugging
-- [ ] Verificar bundle size (no inflar JS innecesariamente)
-
----
-
-## 🔧 Development Commands
-
+**Herramienta de búsqueda:**
 ```bash
-# Build frontend assets (watch mode)
-cd themes/travel-concierge-me-theme/assets
-npm run dev
+grep -rn "throw new Error\|showToast\|setError\|showNotification" \
+  themes/travel-concierge-me-theme/assets/scripts/ \
+  --include="*.js" | grep -v "node_modules\|dist\|\.min\." | grep -v "//.*Error"
+```
 
-# Build production
-npm run build
+---
 
-# Check for JS errors
-npm run lint
+### TODO-6 — Verificación visual: simular fallos de proveedor y observar el toast en el navegador
+**Contexto:** El toast de error parcial fue implementado (2026-03-03) en `hotelSearchSlice.js`. Debe verificarse visualmente en el navegador que el mensaje aparece, se ve bien y el texto es el correcto.
 
-# Test hotel search endpoint
+**Pasos para reproducir:**
+
+1. **Activar simulación TBO:**
+   ```bash
+   # Editar .env
+   TCM_SIMULATE_PROVIDER_ERRORS=tbo
+   docker compose up -d
+   ```
+
+2. **Abrir la página de hoteles con una búsqueda válida:**
+   ```
+   http://localhost:5050/hoteles/?search=1&geonameId=3531673&country=MX&checkin=2026-07-20&checkout=2026-07-22&nationality=MX&paxrooms=[{"adults":2}]
+   ```
+
+3. **Observar:**
+   - ✅ Aparece toast tipo `warning` (amarillo/naranja)
+   - ✅ Texto: `"Resultados parciales: TBO Holidays no respondió en este momento. Las opciones mostradas pueden no ser exhaustivas."`
+   - ✅ El toast tiene botón de cierre (×)
+   - ✅ Los resultados de Hotelbeds SÍ se muestran debajo del toast
+   - ✅ El toast desaparece solo en ~8 segundos
+
+4. **Repetir con Hotelbeds:**
+   ```bash
+   TCM_SIMULATE_PROVIDER_ERRORS=hotelbeds
+   docker compose up -d
+   ```
+   - ✅ Toast: `"Resultados parciales: Hotelbeds no respondió..."`
+   - ✅ Resultados de TBO se muestran
+
+5. **Restaurar modo normal:**
+   ```bash
+   TCM_SIMULATE_PROVIDER_ERRORS=none
+   docker compose up -d
+   ```
+   - ✅ Sin toast, ambos providers muestran resultados
+
+**Criterio de aceptación:** El tester confirma visualmente los 3 escenarios (TBO falla, HB falla, ambos OK).
+
+---
+
+## � ALTO — Bugs de resiliencia
+
+### TODO-7 — TBO: cards completamente vacías cuando HotelDetails falla
+**Encontrado:** 2026-03-04 mediante simulación con `TCM_SIMULATE_HOTEL_DETAILS_ERROR=1`  
+**Archivos afectados:**
+- `classes/Providers/Tbo/TboHotelProvider.php` (método `enrich_with_hotel_details` + `transform_hotel_to_canonical`)
+
+**Descripción del bug:**
+Cuando `/HotelDetails` de TBO falla (timeout, error de API, o nulo), el método `enrich_with_hotel_details()` retorna `$tbo_response` sin el campo `HotelDetails` en cada hotel. Al transformar a formato canónico, el resultado son hoteles con **todos los campos de enriquecimiento vacíos**:
+
+```
+TBO Hotel (sin HotelDetails):
+  hotelName:   ❌ vacío   ← el nombre no llega del Search response
+  imageUrl:    ❌ vacío
+  description: ❌ vacío
+  amenities:   ❌ vacío
+```
+
+**Comparación:**
+```
+Hotelbeds (normal):        TBO (HotelDetails OK):     TBO (HotelDetails FAIL):
+  hotelName: ✅             hotelName: ✅               hotelName: ❌ VACÍO
+  imageUrl:  ✅             imageUrl:  ✅               imageUrl:  ❌ VACÍO
+  desc:      ✅             desc:      ✅               desc:      ❌ VACÍO
+```
+
+**Impacto en UX:** Los hoteles TBO aparecen como cards en blanco (sin nombre, sin imagen, sin descripción). Es **peor que no mostrarlos**: confunden al usuario y degradan la experiencia.
+
+**Causa raíz:**
+`transform_hotel_to_canonical()` para TBO obtiene `hotelName`, `imageUrl`, `description`, `amenities` del campo `HotelDetails` (enriquecimiento). Si ese campo es `null` o ausente, no hay fallback al `HotelName` que SÍ viene en la respuesta del `/Search` de TBO.
+
+**Opciones de solución (en orden de preferencia):**
+
+1. **Filtrar hotels sin nombre** — en `transform_to_canonical()` o `enrich_with_hotel_details()`, excluir hoteles cuyo canonical resultante tiene `hotelName` vacío:
+   ```php
+   $canonical_hotels = array_filter($canonical_hotels, fn($h) => !empty($h['hotelName']));
+   ```
+
+2. **Fallback a datos del Search** — en `transform_hotel_to_canonical()`, usar `$hotel['HotelName']` (del Search) como fallback si `$hotel['HotelDetails']['HotelName']` está vacío.
+
+3. **Marcar como degradado** — retornar los hoteles con un flag `_degraded: true` y que el frontend los omita o los muestre diferenciados.
+
+**La opción 1 es la más segura**: un hotel sin nombre no tiene valor para el usuario.
+
+**Testing:**
+```bash
+# Activar simulación
+TCM_SIMULATE_HOTEL_DETAILS_ERROR=1
+docker compose up -d
+
+# Limpiar L2 canonical TBO
+docker compose exec wordpress wp --allow-root eval 'global $wpdb; $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name REGEXP \"_transient_tcm:canonical:v[0-9]+:tbo:\"");'
+
+# Buscar con perPage alto para ver TBO hotels
 curl -X POST http://localhost:5050/wp-json/tcm/v1/hotels-search \
   -H "Content-Type: application/json" \
-  -d '{"geonameId": 3531673, "checkIn": "2026-03-20", "checkOut": "2026-03-22", "nationality": "MX", "paxRooms": [{"adults": 2}]}'
+  -d '{"geonameId": 3531673, "checkIn": "2026-07-20", "checkOut": "2026-07-22", "nationality": "MX", "paxRooms": [{"adults": 2}], "perPage": 100}'
 
-# Check response format (filters data)
-curl ... | jq '.data.hotels[] | {hotelName, rating, pricePerNight, amenities, provider}'
+# Verificar: hoteles TBO deben filtrarse (0 TBO en respuesta) o tener hotelName desde Search
+```
 
-# Browser console debugging
-# Add to hotel-results-handler.js:
-console.group('[Filters Debug]');
-console.log('Active filters:', this.activeFilters);
-console.log('Filtered hotels count:', filteredHotels.length);
-console.log('Total pages:', Math.ceil(filteredHotels.length / perPage));
-console.groupEnd();
+**Restaurar:**
+```bash
+TCM_SIMULATE_HOTEL_DETAILS_ERROR=0
+docker compose up -d
 ```
 
 ---
 
-## 📊 Current State (Feb 11, 2026)
+## �📋 ORDEN DE EJECUCIÓN
 
-**Performance (después de Phase 4):**
-- ✅ Cold search: ~24,233ms (primera vez, popula cache)
-- ✅ Warm search: ~2,535ms (89.5% más rápido)
-- ✅ Execution mode: `parallel` (TBO + Hotelbeds simultáneo)
-- ✅ Cache: L1 (raw) + L2 (canonical) activo
+```
+TODO-1 (botón frágil JS)
 
-**Pendientes frontend:**
-- ⏳ Filtros adaptados a multi-provider format
-- ⏳ Paginación estable (sin visual jumps)
-- 📋 Lazy loading images (future)
-- 📋 Pre-caching destinos populares (future)
+TODO-5 (auditar textos español) → TODO-6 (verificación visual toast)
 
----
+TODO-7 (TBO cards vacías sin HotelDetails) ← BUG ENCONTRADO 2026-03-04
 
-## 📝 Notas
+TODO-3 (session cap) → TODO-2 (DB canónica bookings)
 
-- **Prioridad:** Resolver estabilidad de paginación primero (más crítico para UX)
-- **Testing:** Usar dataset Cancún (98 hotels total, 10 por página = 10 páginas)
-- **Browser support:** Chrome 90+, Firefox 88+, Safari 14+ (ES6 modules)
-- **Accessibility:** WCAG 2.1 Level AA mínimo (keyboard nav, ARIA labels)
-
----
-
-## 🔗 Referencias
-
-- **API Response Format:** Ver `docs/endpoints-architecture.md`
-- **BEM Conventions:** Ver `docs/bem-conventions.md`
-- **Frontend Architecture:** Ver `docs/block-renderers-architecture.md`
-- **Completed Work:** Ver [TODO-OLD.md](TODO-OLD.md) para Phases 1-4
+TODO-4 (md5 → readable key TBO)
+```
