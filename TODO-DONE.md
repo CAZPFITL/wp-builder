@@ -129,3 +129,31 @@ En lugar del anterior HTTP 500 sin cuerpo que rompía el flujo del frontend.
 - `sanitize_text_field()` corrompía rateKey Hotelbeds → reemplazado con `sanitize_booking_code()` — ver `docs/edge-cases/2026-02-21-sanitize-text-field-corrupts-provider-ratekey.md`
 - Logs diagnósticos de investigación (PUNTO-1/4, CACHE-CHECK/HIT/MISS, HotelbedsRAW) eliminados de `HotelbedsHotelProvider.php`
 - **Primera reserva Hotelbeds confirmada en TEST API** — `TCM-4B5E47D6-D9B` — status `CONFIRMED` ✅
+
+---
+
+## ✅ Completado: 2026-03-17
+
+### TODO-7 — TBO: cards completamente vacías cuando HotelDetails falla
+**Archivo:** `classes/Providers/Tbo/TboHotelProvider.php`  
+**Encontrado:** 2026-03-04 mediante simulación con `TCM_SIMULATE_HOTEL_DETAILS_ERROR=1`  
+**Resuelto por:** Sprint TBOHotelCodeList Static Content Strategy (16-17 Mar 2026)
+
+**Cambio implementado:** `transform_hotel_to_canonical()` ahora tiene cadena de precedencia completa:
+```
+search data → code_list static → HotelDetails enrichment → stale L1 cache → fallback ('Hotel {code}')
+```
+
+Cuando `/HotelDetails` falla, `hotel_code_list_static` (poblado por `resolve_hotel_codes_for_city()`) provee: `HotelName`, `HotelAddress`, `CountryName`, `CityName`, `Rating`, `HotelFacilities`, `Images`, `Attractions`, y más (16 campos).
+
+**Campo `_contentSource`** trackea la fuente utilizada:
+- `'search'` — datos básicos del response /Search
+- `'code_list'` — datos estáticos de /TBOHotelCodeList
+- `'enrichment'` — datos completos de /HotelDetails
+- `'code_list+enrichment'` — combinación de ambas fuentes
+- `'stale_l1'` — L1 cache expirado usado como fallback
+- `'fallback'` — placeholder 'Hotel {code}' (último recurso)
+
+**Campo `_contentAvailable`:** `true` cuando `$content_source !== 'none'` — permite al frontend saber si hay datos reales.
+
+**Resultado:** Cards nunca aparecen completamente vacías. Phase 6 validado con búsqueda live en Cancún: 10/10 hoteles TBO con nombres reales, todos con `_contentSource: 'code_list'`. Sin cambios en la estructura canónica visible para el frontend.

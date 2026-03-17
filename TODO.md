@@ -188,85 +188,74 @@ grep -rn "throw new Error\|showToast\|setError\|showNotification" \
 
 ---
 
-## � ALTO — Bugs de resiliencia
+## 🟡 MEDIO — Optimización de memoria (TBO)
 
-### TODO-7 — TBO: cards completamente vacías cuando HotelDetails falla
-**Encontrado:** 2026-03-04 mediante simulación con `TCM_SIMULATE_HOTEL_DETAILS_ERROR=1`  
-**Archivos afectados:**
-- `classes/Providers/Tbo/TboHotelProvider.php` (método `enrich_with_hotel_details` + `transform_hotel_to_canonical`)
-
-**Descripción del bug:**
-Cuando `/HotelDetails` de TBO falla (timeout, error de API, o nulo), el método `enrich_with_hotel_details()` retorna `$tbo_response` sin el campo `HotelDetails` en cada hotel. Al transformar a formato canónico, el resultado son hoteles con **todos los campos de enriquecimiento vacíos**:
-
-```
-TBO Hotel (sin HotelDetails):
-  hotelName:   ❌ vacío   ← el nombre no llega del Search response
-  imageUrl:    ❌ vacío
-  description: ❌ vacío
-  amenities:   ❌ vacío
-```
-
-**Comparación:**
-```
-Hotelbeds (normal):        TBO (HotelDetails OK):     TBO (HotelDetails FAIL):
-  hotelName: ✅             hotelName: ✅               hotelName: ❌ VACÍO
-  imageUrl:  ✅             imageUrl:  ✅               imageUrl:  ❌ VACÍO
-  desc:      ✅             desc:      ✅               desc:      ❌ VACÍO
-```
-
-**Impacto en UX:** Los hoteles TBO aparecen como cards en blanco (sin nombre, sin imagen, sin descripción). Es **peor que no mostrarlos**: confunden al usuario y degradan la experiencia.
+### TODO-8 — Acotar almacenamiento estático en `resolve_hotel_codes_for_city()` (TboHotelProvider)
+**Archivo:** `classes/Providers/Tbo/TboHotelProvider.php`  
+**Problema:** `resolve_hotel_codes_for_city()` guarda campos estáticos en `$this->hotel_code_list_static` para **todos** los hoteles devueltos por `/TBOHotelCodeList` (potencialmente 1000+ en ciudades grandes), pero la búsqueda posterior solo usa un subconjunto limitado (por defecto `$max_codes = 50`). Con `IsDetailedResponse: true`, cada entrada contiene 16 campos estáticos por hotel — lo que puede inflar innecesariamente la memoria PHP y el tiempo de procesamiento por request.
 
 **Causa raíz:**
-`transform_hotel_to_canonical()` para TBO obtiene `hotelName`, `imageUrl`, `description`, `amenities` del campo `HotelDetails` (enriquecimiento). Si ese campo es `null` o ausente, no hay fallback al `HotelName` que SÍ viene en la respuesta del `/Search` de TBO.
+```php
+// Actualmente: itera TODOS los hoteles de la respuesta completa de /TBOHotelCodeList
+foreach ($code_list_response['Hotels'] ?? [] as $hotel) {
+    $code = $hotel['HotelCode'] ?? '';
+    if ($code) {
+        $this->hotel_code_list_static[$code] = [...]; // 16 fields almacenados para TODOS
+    }
+}
+// Pero $codes (los que realmente se usan) tiene máx. MAX_HOTEL_CODES_PER_REQUEST = 100 entradas
+```
 
-**Opciones de solución (en orden de preferencia):**
+**Impacto estimado:**
+- Ciudad pequeña (~50 hoteles): sin impacto relevante
+- Ciudad mediana (~300 hoteles): ~300 entradas almacenadas vs 50-100 usadas
+- Ciudad grande (1000+ hoteles): ~1000+ entradas, memoria inflada, procesamiento innecesario
 
-1. **Filtrar hotels sin nombre** — en `transform_to_canonical()` o `enrich_with_hotel_details()`, excluir hoteles cuyo canonical resultante tiene `hotelName` vacío:
-   ```php
-   $canonical_hotels = array_filter($canonical_hotels, fn($h) => !empty($h['hotelName']));
-   ```
+**Solución conceptual:**
+Acotar la extracción a los códigos que realmente participan en la request:
+```php
+// Opción A (preferida): solo almacenar hoteles que están en $codes
+if ($code && in_array($code, $codes, true)) {
+    $this->hotel_code_list_static[$code] = [...];
+}
 
-2. **Fallback a datos del Search** — en `transform_hotel_to_canonical()`, usar `$hotel['HotelName']` (del Search) como fallback si `$hotel['HotelDetails']['HotelName']` está vacío.
+// Opción B: almacenar hasta MAX_HOTEL_CODES_PER_REQUEST como buffer
+if ($code && count($this->hotel_code_list_static) < self::MAX_HOTEL_CODES_PER_REQUEST) {
+    $this->hotel_code_list_static[$code] = [...];
+}
+```
 
-3. **Marcar como degradado** — retornar los hoteles con un flag `_degraded: true` y que el frontend los omita o los muestre diferenciados.
-
-**La opción 1 es la más segura**: un hotel sin nombre no tiene valor para el usuario.
+**Restricción crítica — NO romper certificación TBO:**
+- `MAX_HOTEL_CODES_PER_REQUEST = 100` es constante de certificación (Feedback #4) — no modificar
+- La estrategia de fallback estático DEBE seguir funcionando: si HotelDetails falla para un código, `hotel_code_list_static[$code]` debe estar disponible
+- Por eso la **Opción A es preferible**: solo nos interesan los códigos que participan en el search
 
 **Testing:**
 ```bash
-# Activar simulación
-TCM_SIMULATE_HOTEL_DETAILS_ERROR=1
-docker compose up -d
-
-# Limpiar L2 canonical TBO
-docker compose exec wordpress wp --allow-root eval 'global $wpdb; $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name REGEXP \"_transient_tcm:canonical:v[0-9]+:tbo:\"");'
-
-# Buscar con perPage alto para ver TBO hotels
+# Buscar en ciudad grande (Madrid ~400 hoteles TBO)
 curl -X POST http://localhost:5050/wp-json/tcm/v1/hotels-search \
   -H "Content-Type: application/json" \
-  -d '{"geonameId": 3531673, "checkIn": "2026-07-20", "checkOut": "2026-07-22", "nationality": "MX", "paxRooms": [{"adults": 2}], "perPage": 100}'
+  -d '{"geonameId": 3117735, "checkIn": "2026-07-20", "checkOut": "2026-07-22", "nationality": "MX", "paxRooms": [{"adults": 2}]}'
 
-# Verificar: hoteles TBO deben filtrarse (0 TBO en respuesta) o tener hotelName desde Search
+# Verificar que hoteles TBO mantienen _contentSource: 'code_list' cuando HotelDetails falla
+# Añadir error_log temporal: error_log('[TBO] hotel_code_list_static count: ' . count($this->hotel_code_list_static));
+# Resultado esperado: count ≤ count($codes)
 ```
 
-**Restaurar:**
-```bash
-TCM_SIMULATE_HOTEL_DETAILS_ERROR=0
-docker compose up -d
-```
+**Dependencias:** Ninguna. Puede ejecutarse en cualquier momento sin afectar otros TODOs.
 
 ---
 
-## �📋 ORDEN DE EJECUCIÓN
+## 📋 ORDEN DE EJECUCIÓN POSIBLE
 
 ```
 TODO-1 (botón frágil JS)
 
 TODO-5 (auditar textos español) → TODO-6 (verificación visual toast)
 
-TODO-7 (TBO cards vacías sin HotelDetails) ← BUG ENCONTRADO 2026-03-04
-
 TODO-3 (session cap) → TODO-2 (DB canónica bookings)
 
 TODO-4 (md5 → readable key TBO)
+
+TODO-8 (acotar hotel_code_list_static en resolve_hotel_codes_for_city)
 ```
