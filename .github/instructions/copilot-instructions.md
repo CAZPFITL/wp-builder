@@ -50,6 +50,100 @@ git ls-files    # ✅ List tracked files
 **NEVER** assume user wants commits automated, even if they say "save this" or "commit the changes". Always clarify and remind them of manual commit policy.
 
 ---
+## 🚨 CRITICAL: NEVER READ APPLICATION STATE FROM THE DOM 🚨
+
+### ❌ ABSOLUTE PROHIBITION: Reading data from DOM elements for business logic
+
+```javascript
+// ❌ FORBIDDEN — DOM is NOT a data source
+document.querySelector('.my-radio:checked').value;
+document.querySelector('.my-input').value;
+document.querySelector('[data-rate-key]').dataset.rateKey;
+
+// ✅ CORRECT — Read from session, store, or API
+sessionData.selectedUpgradeRateKey;
+store.getState().booking.upgradeRateKey;
+await api.get(`bookingSession/${sessionId}`);
+```
+
+### 📋 WHY THIS RULE EXISTS:
+
+**REAL INCIDENT (April 8, 2026):**
+- `upgradeRateKey` was read from `.tcm-upgrade-room__radio:checked` DOM elements
+- The upgrade radios only existed on `/pre-reserva/` page
+- `bookingButtonHandler.js` ran on `/reserva/` page where radios DON'T EXIST
+- Result: **upgrade selection was NEVER transmitted to the backend**
+- Users could select an upgrade, see the price change, navigate to booking page, and the upgrade was silently lost
+- **Booking used the original room instead of the selected upgrade — trust broken with the user**
+
+### 📋 MANDATORY ARCHITECTURE:
+
+1. **Session/Store is the single source of truth** — ALL booking state lives in the server-side session (PHP transient) and/or Redux store
+2. **DOM is ONLY for rendering** — DOM elements display data FROM the session, never the reverse
+3. **User interactions → API call → Session update** — When a user selects/changes something, persist it to the session via API immediately
+4. **Cross-page data flows through session** — If data is needed on Page B that was set on Page A, it MUST be persisted server-side
+
+### ✅ CORRECT PATTERN:
+
+```
+User Action (click/select) 
+  → API call to persist selection to session
+  → Session updated server-side
+  → Next page loads session data
+  → Backend reads from session (single source of truth)
+```
+
+### ⚠️ IF YOU SEE DOM READING IN CODE:
+
+**Treat it as a security/reliability vulnerability.** Find the appropriate session field and refactor to read from session data instead. If no session field exists, create one with a proper PATCH/PUT endpoint.
+
+---
+## 🚨 CRITICAL: NEVER REINVENT EXISTING PATTERNS 🚨
+
+### ❌ ABSOLUTE PROHIBITION: Creating new UI components, validation flows, or feedback mechanisms when equivalent patterns already exist in the codebase
+
+```javascript
+// ❌ FORBIDDEN — Inventing new inline error elements when toast validation already exists
+this.showFieldError(input, 'message');
+const hint = document.createElement('span');
+hint.className = 'tcm-field-error';
+
+// ❌ FORBIDDEN — Creating new SCSS classes for a problem solved by existing styles
+.tcm-field-error { display: block; color: red; }
+
+// ✅ CORRECT — Use the existing validation + toast flow
+const validation = guestDetailsManager.validate(guestData);
+if (!validation.valid) {
+  showToast(errorMsg, 'error', { duration: 8000, html: true });
+}
+```
+
+### 📋 WHY THIS RULE EXISTS:
+
+**REAL INCIDENT (April 18, 2026):**
+- TBO required blocking accented characters in guest names
+- Instead of adding the check to the EXISTING `validateGuestName()` function (which already blocks digits and special chars with the same toast pattern), the agent created:
+  - New `attachTboNameValidation()` method with custom blur handlers
+  - New `showFieldError()` / `clearFieldError()` methods
+  - New `.tcm-field-error` SCSS class with inline error rendering
+- **Result:** Two completely different validation UX patterns for the same form — the existing toast for numbers/symbols AND a new inline error for accents
+- **Wasted effort and inconsistent UX**
+
+### 📋 MANDATORY WORKFLOW:
+
+1. **BEFORE writing new code:** Search the codebase for how the same or similar problem is already solved
+2. **If a pattern exists:** Extend it. Add your condition to the existing validation, use the existing UI feedback, follow the established flow
+3. **NEVER create:** New UI components, new CSS classes, new rendering methods, or new feedback patterns when the existing ones handle the same category of problem
+4. **The bar for "new" is high:** You need an explicit user request for a new pattern, or proof that the existing pattern genuinely cannot handle the case
+
+### ⚠️ EXAMPLES OF VIOLATIONS:
+
+- Adding inline field errors when toast validation exists → Use toast
+- Creating a custom modal when the existing confirmation dialog works → Use dialog
+- Writing a new loading spinner when `data-loading` attribute pattern exists → Use `data-loading`
+- Building a new notification system when `showToast()` is already imported → Use `showToast()`
+
+---
 ## 🚨 CRITICAL: PROVIDER CODE — ALWAYS CHECK DOCUMENTATION FIRST 🚨
 
 ### 📖 MANDATORY: Read Provider Docs Before ANY Provider Work
@@ -254,6 +348,19 @@ docs/2026-03-05-phase-4-parallel-provider-execution.md
 3. **No generic names:** ❌ `notes.md`, `debug.md`, `temp.md` — ✅ `2026-02-21-hotelbeds-prebook-debug-notes.md`
 4. **Edge cases folder:** All investigated bugs/unexpected behaviors → `docs/edge-cases/YYYY-MM-DD-name.md`
 5. **Date = creation date** (not resolution date or today if documenting past events)
+6. **Time in header (MANDATORY):** Every doc MUST include the creation time in Mérida, Yucatán timezone in the header, using **24-hour format** (`HH:MM`):
+   ```markdown
+   **Fecha:** 2026-04-08 22:30 (Mérida, Yucatán)
+   ```
+   **MANDATORY WORKFLOW — NO EXCEPTIONS:**
+   - Run `TZ="America/Merida" date "+%Y-%m-%d %H:%M"` in the terminal BEFORE writing the header.
+   - If the file already exists, use `stat <file>` and read the `Birth:` field (creation time).
+   - ❌ **NEVER invent, guess, or estimate the time** — not even approximately.
+   - ❌ **NEVER use a time from a previous doc** as a reference.
+   - If for any reason the terminal command cannot be run, state: *"No puedo obtener la hora actual. Por favor indícame la hora para incluirla correctamente."* and wait for the user's answer.
+   - This rule exists because invented timestamps are misleading and erode trust in the documentation timeline.
+
+   **🔥 REAL INCIDENT (April 8, 2026):** Agent invented `14:00` as the creation time. Actual time was `22:30`. User had to manually correct it after the fact.
 
 ### When to create documentation
 
@@ -336,6 +443,9 @@ docker compose exec wordpress bash
 # Run WP-CLI commands
 docker compose exec wordpress wp {command}
 
+# Inspect cron mode, TCM-managed hooks, and async heartbeat:
+docker compose exec wordpress wp tcm-cron status
+
 # Rebuild PHP autoload after class changes
 docker compose exec wordpress bash -c 'cd wp-content/themes/travel-concierge-me-theme && composer dump-autoload -o'
 
@@ -343,7 +453,7 @@ docker compose exec wordpress bash -c 'cd wp-content/themes/travel-concierge-me-
 docker logs travel-concierge-me-builder-wordpress-1 --tail 100 -f
 
 # Run database migrations
-docker compose exec wordpress wp tcm-migrate
+docker compose exec wordpress wp my-wp-tables-migrate
 
 # Test hotel search (Cancún)
 curl -X POST http://localhost:5050/wp-json/tcm/v1/hotels-search \
@@ -358,11 +468,14 @@ themes/travel-concierge-me-theme/
 ├── classes/
 │   ├── Admin/           # Theme lifecycle, enqueue, redirects
 │   ├── Base/            # Base class with lifecycle hooks
+│   ├── Cli/             # WP-CLI commands (CliMigration, CliCircuitBreaker, CliCron)
+│   ├── Database/        # Table migrations, DatabaseManager, DatabaseRunner
+│   ├── Diagnostics/     # Runtime diagnostics (AsyncHeartbeat)
 │   ├── Endpoints/       # REST API endpoints (tcm/v1/*)
 │   ├── Providers/       # Provider implementations
 │   │   ├── Hotelbeds/   # HotelbedsHotelProvider, HotelbedsApiClient
 │   │   └── TBO/         # TBOHotelProvider
-│   ├── Database/        # Table migrations, WorldCitiesTable
+│   ├── Traits/          # Shared traits (TCM_Cache, TCM_CacheHousekeeping, …)
 │   └── Blocks/          # Gutenberg block managers
 ├── assets/              # Vite-compiled JS/SCSS
 │   ├── scripts/         # front.js, admin.js
@@ -371,7 +484,8 @@ themes/travel-concierge-me-theme/
 │   ├── endpoints-architecture.md
 │   ├── multi-provider-architecture.md
 │   ├── database-architecture.md
-│   └── hotelbeds-implementation-analysis.md
+│   ├── hotelbeds-implementation-analysis.md
+│   └── dev-docs/2026-03-22-production-cron-setup.md  # Real cron setup runbook
 └── scripts/             # Maintenance scripts (populate-country-codes, etc.)
 ```
 
@@ -574,24 +688,36 @@ private const RESPONSE_TIME_EXHAUSTIVE = 23;      // Feedback #17
 
 **Protected Methods:**
 ```php
-// ❌ NEVER MODIFY - TBO Certification Logic
-normalize_tbo_name()              // Feedback #13 - Name validation
-validate_tbo_name()               // Feedback #13
-compare_cancellation_policies()   // Feedback #10 - Policy comparison
+// ❌ NEVER MODIFY - TBO Certification Logic (TboHotelProvider.php unless noted)
+normalize_name()                  // Feedback #13 - AsciiSlugger transliteration + digit stripping + length enforcement
+validate_book_session()           // Feedback #13 guard - final name/email check before TBO API call
+compare_cancellation_policies()   // Feedback #10 - Policy comparison (TBOEndpoint)
 calculate_response_time()         // Feedback #17 - Dynamic ResponseTime
-book() // lines 199-240           // Feedback #14 - Timeout recovery
-cancel() // lines 317-389          // Feedback #15 - Cancel recovery
+book()                            // Feedback #14 - Timeout recovery
+cancel()                          // Feedback #15 - Cancel recovery
 get_booking_detail()              // Feedback #21 - BookingReferenceId support
 fetch_hotel_details()             // TBO SmartCache - already optimized
+schedule_post_book_detail_followup()   // Feedback #3 - auto +120s follow-up scheduling (TBOEndpoint)
+handle_post_book_detail_followup()     // Feedback #3 - /BookingDetail cron callback (TBOEndpoint)
 ```
 
 **Protected Behaviors:**
 - Timeout recovery with BookingDetail API (Feedbacks #14, #15, #21)
-- Name normalization using Symfony AsciiSlugger (Feedback #13)
+- Multi-layer guest-name validation (Feedback #13) — see below
 - CancelPolicies comparison (Search vs PreBook) (Feedback #10)
 - Dynamic ResponseTime calculation (5-23s) (Feedback #17)
 - BookingType = 'Voucher' required (Feedback #18)
 - NoOfRooms filter = 0 (Feedback #16)
+
+**Guest-name validation is multi-layer (Feedback #13):**
+Names are validated at five independent layers. Do not remove or weaken any of them in isolation:
+1. **JS** (`guestDetailsManager.js` — `validateGuestName()`): min 2 chars, no digits, allowed charset, Spanish error messages
+2. **HTML** (`tcm-guest-form` block template): `minLength: 2` attribute on all name inputs
+3. **PHP session** (`BookingSession/Endpoint.php` — `validate_guest_details_schema()`): min 2 + max 25 + no digits + charset, all guests
+4. **Provider normalization** (`TboHotelProvider::normalize_name()`): AsciiSlugger transliteration, digit strip, length clamp to 3–25
+5. **Provider guard** (`TboHotelProvider::validate_book_session()`): last-resort min-length + digit check before any TBO API call
+
+The JS and PHP session layers enforce min 2 chars (UX). The provider layer enforces min 3 chars (TBO API requirement). `normalize_name()` always runs before the TBO `/Book` request — never bypass it.
 
 **When making cache changes:**
 1. ✅ SAFE: Modify CanonicalCache trait (generic, applies to all providers)
@@ -601,6 +727,32 @@ fetch_hotel_details()             // TBO SmartCache - already optimized
 5. ❌ NEVER: Modify TBO constants, validation methods, or timeout recovery
 
 **Documentation:** See `docs/todos/tbo-todo.md` for complete feedback list and implementations.
+
+---
+
+## ⚠️ Cron / Async Execution — Do Not Confuse Scheduling with Execution
+
+**This applies to any work involving WP-Cron, scheduled events, or time-delayed callbacks (e.g. the TBO +120-second BookingDetail follow-up).**
+
+WordPress pseudo-cron fires scheduled events only when HTTP traffic hits the site. In low-traffic environments (staging, certification environments, API-only tests), a scheduled event may be queued but not execute within its expected window.
+
+### ❌ Never assume:
+- "The event is scheduled, therefore it fires on time."
+- "The code path is correct, therefore the delayed call reaches the external API."
+- "This works in dev, so it works in staging."
+
+### ✅ Always:
+1. **Check `wp tcm-cron status`** before concluding async behavior is resolved in an environment.
+2. **Verify the heartbeat timestamp** (`tcm_async_test_last_run`) is recent before declaring cron healthy.
+3. **Distinguish** between: the scheduling code path (always correct if registered) and actual execution (environment-dependent).
+4. **Reference `inc/env.php`** to understand `TCM_DISABLE_WP_CRON` → `DISABLE_WP_CRON` before advising on cron reliability.
+5. **Point to the ops runbook** (`docs/dev-docs/2026-03-22-production-cron-setup.md`) when real cron setup is needed.
+
+### Verification command:
+```bash
+docker compose exec wordpress wp tcm-cron status
+```
+If the heartbeat last-run is stale, scheduled events are not executing. Enable real cron before declaring the async flow resolved.
 
 ### Database Tables
 

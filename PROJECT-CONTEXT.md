@@ -2,7 +2,7 @@
 
 > **Single source of truth** for the Travel Concierge Me platform.
 > Every statement in this document is backed by actual repository files.
-> Last verified: 2026-03-04.
+> Last verified: 2026-03-24. Updated: 2026-03-24 — added §19 guest-name validation layers.
 
 ---
 
@@ -167,7 +167,11 @@ A **standalone Node 18** image for Vite, NOT used by `docker-compose.yaml`. It c
 | `TCM_DEBUG_FORCE_CANCEL_ERROR` | `false/recovered/escalation` | `false` | Simulate cancel API errors |
 | `TCM_SIMULATE_PROVIDER_ERRORS` | `none/random/tbo/hotelbeds` | `none` | Force provider failures for resilience testing |
 | `TCM_SIMULATE_HOTEL_DETAILS_ERROR` | `0` | `0` | Simulate hotel details endpoint errors |
+### Cron / Async Execution
 
+| Variable | Type | Default | Purpose |
+|----------|------|---------|--------|
+| `TCM_DISABLE_WP_CRON` | `true/false/1/yes/on` | `false` | When truthy, defines WordPress `DISABLE_WP_CRON` constant — disables pseudo-cron (page-load–triggered). Requires a real system cron to call `wp-cron.php`. See §18. |
 ---
 
 ## 5. Theme Architecture
@@ -180,8 +184,8 @@ A **standalone Node 18** image for Vite, NOT used by `docker-compose.yaml`. It c
 **Boot sequence** (`functions.php`):
 
 1. Defines `TCM_API_DEBUG_MODE = true`
-2. Requires `inc/env.php` — defines constants: `TCM_VERSION` (`2025.12.2`), `TEMPLATE_DIR`, `TEMPLATE_DIR_URI`, `WP_ENV`, `PREFIX` (`tcm_`), `TCM_DB_MIGRATION_VERSION`
-3. Requires `inc/loader.php` — loads Composer autoloader, helper files, registers WP-CLI commands, inits `TCM_Cache`, `TCM_CacheHousekeeping`, `ThemeActivation`
+2. Requires `inc/env.php` — defines constants: `TCM_VERSION` (`2025.12.2`), `TEMPLATE_DIR`, `TEMPLATE_DIR_URI`, `WP_ENV`, `PREFIX` (`tcm_`), `TCM_DB_MIGRATION_VERSION`; also reads `TCM_DISABLE_WP_CRON` and conditionally defines `DISABLE_WP_CRON` for WordPress runtime cron behavior
+3. Requires `inc/loader.php` — loads Composer autoloader, helper files, registers WP-CLI commands (`CliMigration`, `CliCircuitBreaker`, `CliCron`), inits `TCM_Cache`, `TCM_CacheHousekeeping`, `AsyncHeartbeat`; registers TBO post-book cron action (see §18)
 4. Instantiates `Admin::getInstance()` — bootstraps the entire theme lifecycle
 
 ### 5.2 Helper Files (`inc/helpers/`)
@@ -231,12 +235,13 @@ Installed automatically by `install-required-plugins.sh` on container start:
 
 ### 5.5 WP-CLI Commands
 
-Registered in `inc/loader.php`:
+Registered in `inc/loader.php` (under `WP_CLI` guard, classes in `classes/Cli/`):
 
 | Command | Class | Purpose |
-|---------|-------|---------|
+|---------|-------|--------|
 | `wp my-wp-tables-migrate` | `CliMigration` | Run database migrations |
-| `wp tcm-circuit` | `CliCircuitBreaker` | Manage circuit breaker states |
+| `wp tcm-circuit` | `CliCircuitBreaker` | Inspect / reset provider circuit-breaker state |
+| `wp tcm-cron status` | `CliCron` | Show cron mode, scheduled TCM hooks, and async heartbeat last-run |
 
 ### 5.6 Navigation Menus
 
@@ -272,13 +277,15 @@ classes/
 │   └── ThemeActivation.php    # Hooks for theme activation (migration triggers)
 ├── Blocks/
 │   └── BlocksManager.php      # Auto-discovers and registers Gutenberg blocks
+├── Cli/
+│   ├── CliMigration.php       # WP-CLI: wp my-wp-tables-migrate
+│   ├── CliCircuitBreaker.php  # WP-CLI: wp tcm-circuit
+│   └── CliCron.php            # WP-CLI: wp tcm-cron (cron mode, events, heartbeat)
 ├── Database/
 │   ├── BaseMigration.php      # Abstract migration base
 │   ├── BaseTable.php          # Abstract table base
 │   ├── DatabaseManager.php    # Migration orchestrator (runs on init + theme switch)
 │   ├── DatabaseRunner.php     # SQL migration runner
-│   ├── CliMigration.php       # WP-CLI: wp my-wp-tables-migrate
-│   ├── CliCircuitBreaker.php  # WP-CLI: wp tcm-circuit
 │   ├── BookingGuests/         # Migration: booking_guests table
 │   ├── BookingItems/          # Migration: booking_items table
 │   ├── BookingPassengers/     # Migration: booking_passengers table
@@ -290,6 +297,8 @@ classes/
 │   ├── Guests/                # Migration: guests table
 │   ├── Nationalities/         # Migration: nationalities table
 │   └── WorldCities/           # Migration: world_cities table
+├── Diagnostics/
+│   └── AsyncHeartbeat.php     # Recurring cron heartbeat — diagnostic only (see §18)
 ├── Endpoints/
 │   ├── BaseEndpoint.php       # Abstract base (hooks register_routes into rest_api_init)
 │   ├── UnifiedHotelEndpoint.php  # Multi-provider hotel search
@@ -478,6 +487,10 @@ classes/Providers/
   - `NAME_MIN_LENGTH = 3`, `NAME_MAX_LENGTH = 25`
   - `RESPONSE_TIME_FAST = 10`, `RESPONSE_TIME_NORMAL = 15`, `RESPONSE_TIME_EXHAUSTIVE = 23`
   - `MAX_ROOMS = 6`, `MAX_ADULTS_PER_ROOM = 6`, `MAX_CHILDREN_PER_ROOM = 4`
+- Key certification methods (TBO feedback #13 — **do not weaken**):
+  - `normalize_name(string $name)` — AsciiSlugger transliteration, digit stripping, length clamped to 3–25 chars; runs for every guest name before the TBO `/Book` request
+  - `validate_book_session(array $session)` — last-resort guard; checks min-length, digit presence, and email for all guests before any TBO API call
+- Guest-name validation is multi-layer (see §19).
 
 **ProviderFactory:**
 - `ProviderFactory::make('tbo')` → reads `TBOH_API_URL`, `TBOH_API_USERNAME`, `TBOH_API_PASSWORD`
@@ -926,6 +939,12 @@ docker compose exec wordpress wp {command}      # Run WP-CLI command
 ./run-migrations.sh                             # Run all DB migrations (--force=true)
 docker compose exec wordpress wp my-wp-tables-migrate --force=true
 
+# --- Cron ---
+docker compose exec wordpress wp tcm-cron status                          # Show cron mode + TCM events + heartbeat
+docker compose exec wordpress wp tcm-cron status --hook=tcm_tbo_post_book_detail_followup  # Filter to TBO follow-up
+docker compose exec wordpress wp cron event run --due-now                 # Manually fire overdue events
+docker compose exec wordpress wp option get tcm_async_test_last_run --format=json  # Raw heartbeat data
+
 # --- Cache ---
 ./clear-all-caches.sh                           # Full cache clear (object cache + transients + L2 + provider)
 ./clear-transients.sh                           # Clear transients only
@@ -985,5 +1004,139 @@ State management for booking flow: `slices/`, `selectors/`, `middleware/`, `api/
 - Database tables MUST remain vendor-agnostic (no provider-specific columns)
 - All providers implement `HotelProviderInterface` and transform to canonical format
 - Never modify TBO certification constants/methods (see `docs/todos/tbo-todo.md`)
+- Guest-name validation is multi-layer — see §19 before modifying any name-handling code
 - After creating/moving PHP classes: run `./run-autoload.sh`
 - See `TODO.md` for current sprint tasks, `TODO-DONE.md` for completed work
+- Async/cron reliability is environment-dependent; see §18 before assuming scheduled events fire on time
+
+---
+
+## 18. Scheduled Async Flows & Cron Configuration
+
+### 18.1 TBO Post-Book BookingDetail Follow-Up
+
+TBO certification requires an automatic call to `/BookingDetail` after every successful `/Book` response. The system implements this as a scheduled WP-Cron single event.
+
+| Property | Value |
+|----------|-------|
+| **Trigger** | `TBOEndpoint::handle_book()` — on successful TBO Book response |
+| **Scheduler** | `TBOEndpoint::schedule_post_book_detail_followup()` |
+| **Cron hook** | `TBOEndpoint::CRON_HOOK_POST_BOOK_DETAIL` = `tcm_tbo_post_book_detail_followup` |
+| **Delay** | `TBOEndpoint::POST_BOOK_DETAIL_DELAY_SECONDS` = `120` seconds |
+| **Callback** | `TBOEndpoint::handle_post_book_detail_followup()` (public static, 4 args) |
+| **Registered** | `add_action(CRON_HOOK_POST_BOOK_DETAIL, ..., 10, 4)` in `inc/loader.php` |
+| **Identifier** | `BookingReferenceId` (`TCM-{session_prefix}-{unix_ts}`) embedded in cron args at book time |
+| **API called** | `TboHotelProvider::get_booking_detail(['bookingReferenceId' => ...])` → TBO `/BookingDetail` |
+
+The scheduler uses `wp_next_scheduled()` to prevent duplicate scheduling for the same booking.
+
+**Operational note:** This event is scheduled reliably, but execution within the 120-second window requires either browser traffic (pseudo-cron) or a real system cron. See §18.3.
+
+### 18.2 Async Heartbeat (Diagnostic)
+
+**Class:** `classes/Diagnostics/AsyncHeartbeat.php`
+**Purpose:** Diagnostic only — not part of booking logic. Provides operators a simple signal that scheduled cron execution is actively occurring in the environment.
+
+| Property | Value |
+|----------|-------|
+| **Hook** | `tcm_async_test_heartbeat` (`AsyncHeartbeat::CRON_HOOK`) |
+| **Schedule** | `tcm_every_minute` (60 s interval, registered via `cron_schedules` filter) |
+| **Option written** | `tcm_async_test_last_run` (`AsyncHeartbeat::OPTION_NAME`) |
+| **Option contents** | `unix_timestamp`, `datetime_utc`, `datetime_local`, `timezone`, `source` |
+| **Init** | `AsyncHeartbeat::init()` called from `inc/loader.php` |
+
+If `tcm_async_test_last_run` shows a timestamp older than ~90 seconds, scheduled events are not executing reliably in the current environment.
+
+```bash
+# Raw option read:
+docker compose exec wordpress wp option get tcm_async_test_last_run --format=json
+
+# Via cron inspection command:
+docker compose exec wordpress wp tcm-cron status
+```
+
+### 18.3 Real Cron vs Pseudo-Cron
+
+WordPress pseudo-cron fires scheduled events only when an HTTP request hits the site. In low-traffic or API-only environments this means events may execute late or miss their window entirely.
+
+**Environment variable:** `TCM_DISABLE_WP_CRON`
+**Handled in:** `inc/env.php`
+**Effect:** Truthy values (`true`, `1`, `yes`, `on`) cause `inc/env.php` to define `DISABLE_WP_CRON = true`, which stops WordPress from spawning `wp-cron.php` on page loads. A system cron must then drive execution.
+
+**Docker Compose passthrough:** `TCM_DISABLE_WP_CRON: ${TCM_DISABLE_WP_CRON:-false}` (defaults to `false`).
+
+```bash
+# .env to enable real cron mode:
+TCM_DISABLE_WP_CRON=true
+```
+
+**Environment behavior summary:**
+
+| Environment | `TCM_DISABLE_WP_CRON` | Cron behavior |
+|-------------|----------------------|---------------|
+| Local dev | `false` (default) | Pseudo-cron — fires on page loads |
+| Staging / certification | `true` recommended | Requires system cron job |
+| Production | `true` recommended | System cron ensures reliable timing |
+
+**Ops runbook:** `themes/travel-concierge-me-theme/docs/dev-docs/2026-03-22-production-cron-setup.md`
+
+### 18.4 Cron Health Verification
+
+```bash
+# Show cron mode + all TCM-managed events + heartbeat age:
+docker compose exec wordpress wp tcm-cron status
+
+# Filter to TBO post-book follow-up:
+docker compose exec wordpress wp tcm-cron status --hook=tcm_tbo_post_book_detail_followup
+
+# Manually run overdue events:
+docker compose exec wordpress wp cron event run --due-now
+
+# Expected log sequence after a successful TBO booking:
+# [TBOBooking] 📋 Scheduled post-book BookingDetail follow-up in 120s ...
+# ... (120 s later) ...
+# [TBOBooking] 🔄 Post-book BookingDetail follow-up started ...
+# [TBOBooking] ✅ Post-book BookingDetail follow-up successful ...
+
+# Tail TBO booking logs:
+docker logs travel-concierge-me-builder-wordpress-1 --tail 200 | grep "\[TBOBooking\]"
+```
+
+---
+
+## 19. Guest-Name Validation Layers (TBO Feedback #13)
+
+TBO requires that guest `FirstName` and `LastName` in every `/Book` request contain no digits, no unsupported special characters, and are between 3 and 25 characters. Validation is implemented at five independent layers so that an invalid name cannot reach the TBO API regardless of how the request originates.
+
+### 19.1 Layer Stack
+
+| Layer | File | Enforcement |
+|-------|------|-------------|
+| **JS (UX)** | `assets/scripts/modules/guestDetailsManager.js` — `validateGuestName()` | Min 2 chars, no digits, allowed charset (A–Z, Latin Extended, space, `-`, `'`); Spanish error messages |
+| **HTML attr** | `blocks/src/blocks/tcm-guest-form/index.js` — TEMPLATE | `minLength: 2` on all firstName/lastName inputs |
+| **PHP session** | `classes/Endpoints/BookingSession/Endpoint.php` — `validate_guest_details_schema()` | Min 2, max 25, no digits, charset check, all guests; returns `WP_Error` before writing session |
+| **Provider normalization** | `classes/Providers/Tbo/TboHotelProvider.php` — `normalize_name()` | AsciiSlugger → digit strip → whitespace collapse → length clamp (pad to 3, truncate at 25) |
+| **Provider guard** | `classes/Providers/Tbo/TboHotelProvider.php` — `validate_book_session()` | Min-length + digit check for all guests; last-resort HTTP 400 before any TBO API call |
+
+### 19.2 Length Policy
+
+| Layer | Min | Max | Notes |
+|-------|-----|-----|-------|
+| JS, HTML, PHP session | 2 | 25 | UX minimum; allows 2-char names (e.g. "Li") |
+| TBO API (`normalize_name`) | 3 | 25 | TBO requirement; names shorter than 3 are padded with 'X' |
+| Provider guard (`validate_book_session`) | 3 (`NAME_MIN_LENGTH`) | — | TBO constant; blocks any sub-3-char name after normalization |
+
+### 19.3 Allowed Character Set
+
+`/^[A-Za-z\u00C0-\u024F\s'\-]+$/` (JS) / `/^[A-Za-z\x{00C0}-\x{024F}\s'\-]+$/u` (PHP)
+
+Allowed: ASCII letters, Latin Extended A+B (é, ñ, ü, ö, etc.), spaces, hyphens, apostrophes.  
+Rejected at JS and PHP session layers: digits, `@`, `#`, `$`, and all other special characters.
+
+**Note:** `normalize_name()` further converts accented characters to their ASCII equivalents (é→e, ñ→n) before sending to TBO. This is a TBO API constraint — not a data storage constraint.
+
+### 19.4 Required Builds
+
+After modifying any of the JS/block files, rebuild:
+- `blocks/` — `npm run build` inside `blocks/`
+- `assets/` — `npm run build` inside `assets/`

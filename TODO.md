@@ -246,6 +246,100 @@ curl -X POST http://localhost:5050/wp-json/tcm/v1/hotels-search \
 
 ---
 
+---
+
+## 🔴 ALTO — Bugs confirmados en DB write/cancel paths (branch `feat/db-updates-4-20`)
+
+### TODO-9 — Hotelbeds cancel: no persiste cancelación a la DB V2
+**Branch donde hacerlo:** `hotelbeds-integration-sprint-2` (o la branch activa de Hotelbeds)  
+**Archivo:** `classes/Endpoints/Hotelbeds/Endpoint.php` → `handle_cancel_booking()`  
+**Detectado:** 2026-04-24, Test B del pre-merge de `feat/db-updates-4-20`  
+**Evidencia:** Booking `69-7929837` cancelado en Hotelbeds API correctamente (HTTP 200), pero en la DB quedó `status='confirmed'`, `cancelled_at=NULL`, sin evento `cancel` en `tcm_booking_events`.
+
+**Causa raíz:**  
+`handle_cancel_booking()` llama a la API de Hotelbeds y retorna la respuesta, pero no llama a `BookingRepository::update_status()` ni `BookingRepository::add_event()`. El patrón correcto sí existe en el cancel de TBO (`TBO/Endpoint.php` ~línea 1807).
+
+**Fix:**  
+Después de `transform_cancellation_response()` y antes del `return rest_ensure_response(...)`, solo para `$cancellation_flag === 'CANCELLATION'`:
+```php
+if ( $cancellation_flag === 'CANCELLATION'
+    && defined( 'USE_DATABASE' ) && USE_DATABASE === true
+    && class_exists( 'BookingRepository' ) && class_exists( 'ProvidersRepository' )
+) {
+    try {
+        $providers_repo = new \ProvidersRepository();
+        $hb_pid = $providers_repo->get_id_by_code( 'hotelbeds' );
+        if ( $hb_pid ) {
+            $repo = new \BookingRepository();
+            // $booking_id (e.g. "69-7929837") == confirmation_code in tcm_bookings
+            $row = $repo->get_by_confirmation_code( (int) $hb_pid, (string) $booking_id );
+            if ( $row ) {
+                $repo->update_status( (int) $row['id'], 'cancelled' );
+                $repo->add_event( (int) $row['id'], [
+                    'event_type'        => 'cancel',
+                    'event_status'      => 'success',
+                    'from_status'       => $row['status'] ?? 'confirmed',
+                    'to_status'         => 'cancelled',
+                    'provider_endpoint' => '/bookings/{id}?cancellationFlag=CANCELLATION',
+                    'response_json'     => wp_json_encode( $hotelbeds_response['booking'] ?? [] ),
+                ] );
+                error_log( "[Hotelbeds] 💾 Cancellation persisted to V2 schema — booking_id={$row['id']}" );
+            }
+        }
+    } catch ( \Exception $db_ex ) {
+        error_log( "[Hotelbeds] ⚠️ Cancel DB sync exception: " . $db_ex->getMessage() );
+    }
+}
+```
+
+**Verificación post-fix:**  
+1. Hacer una reserva Hotelbeds y cancelarla  
+2. `SELECT status, cancelled_at FROM tcm_bookings WHERE confirmation_code = '{id}';` → debe ser `cancelled` con timestamp  
+3. `SELECT event_type FROM tcm_booking_events WHERE booking_id = {id};` → debe tener evento `cancel/success`
+
+---
+
+### ~~TODO-10~~ ✅ RESUELTO — TBO book: `persist_booking_to_database()` falla porque TBO Book API no devuelve `BookingId`
+**Resuelto:** 2026-04-24 — movido a TODO-DONE.md  
+**Nota arquitectural:** La doc oficial de TBO no define `BookingId` en ningún response. `ConfirmationNumber` es el único identificador. `provider_booking_id` quedará siempre vacío para TBO — es correcto.
+**Branch donde hacerlo:** `feat/db-updates-4-20` o la siguiente branch de DB  
+**Archivo:** `classes/Endpoints/TBO/Endpoint.php` → `persist_booking_to_database()`  
+**Detectado:** 2026-04-24, reserva `GV7B4U` (Test C fresh)  
+**Evidencia en logs:**
+```
+[TBOBooking] ⚠️ V2 persistence failed for session 4a6b2c34-...: book_data.bookingId is empty; cannot derive idempotency key.
+[TBOBooking] ✅ Book successful - BookingId: , ConfirmationNo: GV7B4U
+```
+
+**Causa raíz:**  
+TBO Book API (`/Book`) solo retorna `ConfirmationNumber` (e.g. `GV7B4U`). **NO retorna `BookingId`** en la respuesta inicial (ver `docs/tbo-api/tbo-book-api.md`). El `BookingId` numérico de TBO solo se obtiene en el follow-up `/BookingDetail` (110s después, Feedback #3).  
+
+`persist_booking_to_database()` línea 2772 exige que `book_data['bookingId']` no esté vacío para derivar el idempotency key → falla inmediatamente para TBO.
+
+**Fix:**  
+Usar `confirmationNumber` como idempotency anchor cuando `bookingId` está vacío:
+```php
+// línea ~2772 en persist_booking_to_database()
+$provider_booking_id  = (string) ( $book_data['bookingId'] ?? '' );
+$confirmation_number  = (string) ( $book_data['confirmationNumber'] ?? '' );
+
+// TBO Book API no retorna BookingId en la respuesta inicial — usar ConfirmationNo como anchor.
+$idempotency_anchor = $provider_booking_id !== '' ? $provider_booking_id : $confirmation_number;
+if ( $idempotency_anchor === '' ) {
+    return new WP_Error( 'missing_booking_id', 'Both bookingId and confirmationNumber are empty; cannot derive idempotency key.' );
+}
+$idempotency_key = $session_id . ':' . $idempotency_anchor;
+```
+
+El `handle_post_book_detail_followup()` (que corre 120s después) ya obtiene el `BookingId` real de TBO via `/BookingDetail` y puede actualizarlo en la DB. Verificar que ese follow-up también actualice `provider_booking_id` en `tcm_bookings` si actualmente busca por `provider_booking_id` que estaría vacío (línea ~2675: `get_by_provider_booking_id` — necesita fallback a `confirmation_code`).
+
+**Verificación post-fix:**  
+1. Hacer una reserva TBO  
+2. `SELECT id, confirmation_code, status FROM tcm_bookings WHERE confirmation_code = 'GV7B4U';` → debe aparecer  
+3. Esperar ~2 minutos y verificar que el follow-up actualizó `provider_booking_id` y `provider_status`
+
+---
+
 ## 📋 ORDEN DE EJECUCIÓN POSIBLE
 
 ```
@@ -258,4 +352,8 @@ TODO-3 (session cap) → TODO-2 (DB canónica bookings)
 TODO-4 (md5 → readable key TBO)
 
 TODO-8 (acotar hotel_code_list_static en resolve_hotel_codes_for_city)
+
+TODO-9 (Hotelbeds cancel DB — hacerlo en branch hotelbeds)
+
+TODO-10 (TBO bookingId vacío — hacerlo en feat/db-updates-4-20 o próxima branch DB)
 ```

@@ -4,7 +4,16 @@ Archivo de tareas completadas. Los TODOs se mueven aquí automáticamente al com
 
 ---
 
-## ✅ Completado: 2026-02-21
+## ✅ Completado: 2026-04-24
+
+### TODO-10 — TBO book: `persist_booking_to_database()` falla porque TBO Book API no devuelve `BookingId`
+**Archivo:** `classes/Endpoints/TBO/Endpoint.php`  
+**Cambios:**
+1. `persist_booking_to_database()`: ya no falla si `bookingId` está vacío. Usa `confirmationNumber` como anchor del idempotency key cuando TBO no retorna `BookingId` en la respuesta inicial del `/Book`.
+2. `handle_post_book_detail_followup()` step 4: removido guard `$booking_id !== ''` que bloqueaba la sync. Búsqueda en cascada: `get_by_provider_booking_id(bookingId)` → `get_by_provider_booking_id(confirmationNo)` → `get_by_confirmation_code(confirmationNo)`. Backfill de `provider_booking_id` cuando el follow-up `/BookingDetail` retorna el BookingId real.  
+**Verificado:** Reserva `XBGD3N` apareció en `tcm_bookings` (id=19). Follow-up sincronizó `provider_status: confirmed`. `provider_booking_id` queda vacío — **esto es el comportamiento correcto y definitivo**: la doc oficial de TBO (`tbo-book-api.md`, `tbo-bookingdetail-api.md`) NO documenta ningún campo `BookingId` en los responses de `/Book` ni `/BookingDetail`. El identificador oficial de TBO es `ConfirmationNumber`. El campo `provider_booking_id` para reservas TBO debe considerarse siempre vacío, y el `confirmation_code` es el identificador canónico.
+
+---
 
 ### TODO-01 — Corregir routing en `handle_book()`
 **Archivo:** `classes/Endpoints/TBO/Endpoint.php`  

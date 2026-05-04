@@ -85,6 +85,9 @@ Este es un proyecto para construcción de temas de WordPress con soporte para Vi
     # Multi-Provider Hotel Search
     TCM_ACTIVE_PROVIDERS=hotelbeds,tbo
     
+    # Cron reliability (set to true in staging/production)
+    TCM_DISABLE_WP_CRON=false
+    
     # TBO Holidays API
     TBOH_API_URL=http://api.tbotechnology.in/TBOHolidays_HotelAPI
     TBOH_API_USERNAME=your_username
@@ -250,6 +253,27 @@ docker logs travel-concierge-me-builder-wordpress-1 --tail 100 | grep -E "\[Hote
 # Run database migrations
 docker compose exec wordpress wp tcm-migrate
 ```
+
+### Cron & Async Verification
+
+```bash
+# Check cron mode, TCM-managed hooks, and async heartbeat:
+docker compose exec wordpress wp tcm-cron status
+
+# Filter to TBO post-book follow-up events:
+docker compose exec wordpress wp tcm-cron status --hook=tcm_tbo_post_book_detail_followup
+
+# Read raw heartbeat option (confirms cron executed recently):
+docker compose exec wordpress wp option get tcm_async_test_last_run --format=json
+
+# Manually fire any overdue cron events:
+docker compose exec wordpress wp cron event run --due-now
+
+# Tail TBO booking log lines:
+docker logs travel-concierge-me-builder-wordpress-1 --tail 200 | grep "\[TBOBooking\]"
+```
+
+**Cron mode:** By default the project runs WordPress pseudo-cron (events fire when HTTP traffic hits the site). For staging and production reliability — especially the TBO 120-second BookingDetail follow-up — set `TCM_DISABLE_WP_CRON=true` in `.env` and configure a system cron to call `wp-cron.php` every minute. See `themes/travel-concierge-me-theme/docs/dev-docs/2026-03-22-production-cron-setup.md` for the full runbook.
 
 ### Asset Development
 
