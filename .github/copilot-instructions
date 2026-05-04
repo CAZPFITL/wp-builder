@@ -40,7 +40,7 @@ Buenas prácticas específicas
 - Mantener commits pequeños y descriptivos.
 
 Seguridad y credenciales
-- No incluir secretos en el repo. Las credenciales externas (TBOH API) se configuran en `.env` y se leen desde PHP.
+- No incluir secretos en el repo. Las credenciales externas se configuran en `.env` y se leen desde PHP.
 
 Preguntas frecuentes para el asistente
 - ¿Debo ejecutar tests? Sí, cuando se modifiquen funcionalidades críticas o cuando el repo incluya pruebas.
