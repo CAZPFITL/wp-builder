@@ -17,6 +17,18 @@ services:
       TBOH_API_URL: ${TBOH_API_URL}
       TBOH_API_USERNAME: ${TBOH_API_USERNAME}
       TBOH_API_PASSWORD: ${TBOH_API_PASSWORD}
+      HOTELBEDS_API_URL: ${HOTELBEDS_API_URL}
+      HOTELBEDS_API_KEY: ${HOTELBEDS_API_KEY}
+      HOTELBEDS_API_SECRET: ${HOTELBEDS_API_SECRET}
+      TCM_ACTIVE_PROVIDERS: ${TCM_ACTIVE_PROVIDERS:-tbo}
+      TCM_DEBUG_FORCE_PRICE_CHANGE: ${TCM_DEBUG_FORCE_PRICE_CHANGE:-false}
+      TCM_DEBUG_FORCE_POLICY_CHANGE: ${TCM_DEBUG_FORCE_POLICY_CHANGE:-false}
+      TCM_DEBUG_FORCE_CANCEL_ERROR: ${TCM_DEBUG_FORCE_CANCEL_ERROR:-false}
+      TCM_SIMULATE_PROVIDER_ERRORS: ${TCM_SIMULATE_PROVIDER_ERRORS:-none}
+      TCM_SIMULATE_HOTEL_DETAILS_ERROR: ${TCM_SIMULATE_HOTEL_DETAILS_ERROR:-0}
+      TCM_CREATE_DEFAULTS: ${TCM_CREATE_DEFAULTS:-false}
+      TCM_DISABLE_WP_CRON: ${TCM_DISABLE_WP_CRON:-false}
+      WP_DEBUG : ${WP_DEBUG}
     volumes:
       - wordpress_data:/var/www/html
       - ./themes/${ACTIVE_THEME}:/var/www/html/wp-content/themes/${ACTIVE_THEME}
@@ -75,8 +87,6 @@ services:
     volumes:
       - ./themes/${ACTIVE_THEME}/blocks:/app/blocks
     command: ["sh", "-c", "cd forms-entries && npm install && npm run dev"]
-    ports:
-      - "${VITE_PORT_BLOCKS}:${VITE_PORT_BLOCKS}"
     depends_on:
       - wordpress
 
